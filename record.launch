@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<launch>
+
+    <arg name="node_name" default="data_logger"/>
+    <arg name="record_topics" default="/j2s7s300_driver/out/joint_state /j2s7s300_driver/out/joint_torques /j2s7s300_driver/out/tool_wrench /joint_states /kinect/qhd/camera_info /kinect/qhd/image_color_rect/compressed /kinect/qhd/image_depth_rect/compressed /kinect/sd/camera_info /kinect/sd/image_color_rect/compressed /kinect/sd/image_depth_rect/compressed /vector/right_gripper/stat /kf_tracker/state /eef_pose /audio"/>
+    <arg name="datapath" default="seg_study/data/robot_features"/>
+    <arg name="logger_flag" default="logger_flag"/>
+    <arg name="log_control" default="log_control"/>
+
+    <!-- Setup the node with parameters for what we want to listen to 
+         and what the flag used to trigger recording -->
+
+    <node name="$(arg node_name)" pkg="data_logger_bag" type="logger.py" respawn="false" output="screen">
+
+        <!-- This location assumes that it is in your home dir. NOTE: path will be created for you -->
+        <!-- default: data -->
+        <param name="datapath" value="$(arg datapath)" type="string"/>
+        
+        <!-- Note: the topics are separated just by spaces -->
+        <param name="record_topics" value="$(arg record_topics)" type="string"/>
+
+        <!-- Topic name to trigger recording on -->
+        <param name="log_flag_topic" value="$(arg logger_flag)" type="string"/>
+        
+        <!-- Topic name to change logger settings --> 
+        <param name="c6_task_topic" value="$(arg log_control)" type="string"/>
+    </node>
+
+</launch>
