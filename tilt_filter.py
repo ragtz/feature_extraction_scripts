@@ -14,8 +14,8 @@ def filter_tilt(msg, pub):
 
 def main():
     rospy.init_node('tilt_filter')
-    pub = rospy.Publisher('joint_states_filtered', JointState, queue_size=10)
-    rospy.Subscriber('joint_states', JointState, filter_tilt, pub)
+    pub = rospy.Publisher('joint_states', JointState, queue_size=10)
+    rospy.Subscriber('joint_states_pre_filtered', JointState, filter_tilt, pub)
     rospy.spin()
 
 if __name__ == '__main__':
