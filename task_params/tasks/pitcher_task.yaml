@@ -1,0 +1,3 @@
+objects:
+    - pitcher: !include ../hsv_params/pitcher.yaml
+    - bowl: !include ../hsv_params/small_bowl.yaml
