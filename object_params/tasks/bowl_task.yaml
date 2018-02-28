@@ -1,4 +1,0 @@
-objects:
-    - large_bowl: !include ../hsv_params/large_bowl.yaml
-    - small_bowl: !include ../hsv_params/small_bowl.yaml
-    - spoon: !include ../hsv_params/spoon.yaml
