@@ -14,7 +14,23 @@ class ObjectsViz:
         self.obj_filters = obj_filters
         self.viz_pub = None
 
-    def get_cube_marker(self, name, obj):
+    def get_plane_marker(self, name, plane):
+        marker = Marker()
+
+        marker.header = plane.header
+        marker.ns = name
+        marker.id = 0
+        marker.type = Marker.CUBE
+
+        coeffs = plane.coeffs.data
+        marker.pose.position = Point(0.0, 0.0, -coeffs[3]/coeffs[2])
+        marker.pose.orientation.w = 1.0
+        marker.scale = Vector3(0.1, 0.1, 0.1)
+        marker.color = ColorRGBA(0.5, 0.5, 0.5, 1)
+        
+        return marker
+
+    def get_object_marker(self, name, obj):
         marker = Marker()
 
         marker.header = obj.header
@@ -35,7 +51,7 @@ class ObjectsViz:
 
         return marker
 
-    def get_text_marker(self, name, obj):
+    def get_object_name_marker(self, name, obj):
         marker = Marker()
 
         marker.header = obj.header
@@ -43,9 +59,9 @@ class ObjectsViz:
         marker.id = 0
         marker.type = Marker.TEXT_VIEW_FACING
 
-        marker.pose = Point(obj.obb.bb_center.x, 
-                            obj.obb.bb_center.y,
-                            obj.obb.bb_center.z)
+        marker.pose.position = Point(obj.obb.bb_center.x - obj.obb.bb_dims.x/2., 
+                                     obj.obb.bb_center.y - obj.obb.bb_dims.y/2.,
+                                     obj.obb.bb_center.z - obj.obb.bb_dims.z/2.)
 
         marker.scale.z = 0.05
         marker.color = ColorRGBA(1,1,1,1)
@@ -56,13 +72,14 @@ class ObjectsViz:
 
     def publish_objects(self, msg):
         markers = []
+        markers.append(self.get_plane_marker('table', msg.planes[0]))
 
         for name, obj_filter in self.obj_filters.iteritems():
-            obj_idx = obj_filter(msg.objects)
+            obj_idx = obj_filter(msg)
             if obj_idx:
                 obj = msg.objects[obj_idx[0]]
-                markers.append(get_cube_marker(name, obj))
-                markers.append(get_text_marker(name, obj))
+                markers.append(self.get_object_marker(name, obj))
+                markers.append(self.get_object_name_marker(name, obj))
                  
         self.viz_pub.publish(MarkerArray(markers))
 
