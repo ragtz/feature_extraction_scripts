@@ -114,5 +114,11 @@ def object_filter_from_yaml(yaml_file):
 def object_filters_from_yaml(yaml_file):
     with open(yaml_file, 'r') as f:
         objects = yaml.load(f, Loader=YAMLIncludeLoader)['objects']
-    return {name: object_filter(params) for name, params in objects.iteritems()} 
+    return {obj.keys()[0]: object_filter(obj[obj.keys()[0]]) for obj in objects} 
+
+def load_tasks(yaml_file):
+    with open(yaml_file, 'r') as f:
+        tasks = yaml.load(f, Loader=YAMLIncludeLoader)['tasks']
+
+    return {task.keys()[0]: {obj.keys()[0]: object_filter(obj[obj.keys()[0]]) for obj in task[task.keys()[0]]['objects']} for task in tasks}
 
