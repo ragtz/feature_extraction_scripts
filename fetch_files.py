@@ -1,10 +1,26 @@
 #!/usr/bin/env python
 
-from os.path import isfile, join, splitext, basename
-from os import listdir, walk
+from os.path import isfile, exists, dirname, join, splitext, basename
+from os import listdir, makedirs, walk
 from datetime import datetime
+import numpy as np
+import re
 
-OR = lambda z: reduce(lambda x, y: x or y, z, True)
+OR = lambda z: reduce(lambda x, y: x or y, z) if len(z) > 0 else True
+
+def ensure_dir(f):
+    d = dirname(f)
+    if not exists(d):
+        makedirs(d)
+
+def get_task_name(f):
+    return f.split('/')[-3]
+
+def get_skill_name(f):
+    return f.split('/')[-2]
+
+def get_filename(f):
+    return f.split('/')[-1]
 
 def get_files(path, type=None):
     files = [f for f in listdir(path) if isfile(join(path, f))]
