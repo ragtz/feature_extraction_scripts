@@ -20,15 +20,15 @@ topics_list = ['/j2s7s300_driver/out/joint_state',
                '/joint_states',
                '/kinect/qhd/camera_info',
                '/kinect/qhd/image_color_rect/compressed',
-               '/kinect/qhd/image_depth_rect/compressed',
-               '/kinect/sd/camera_info',
-               '/kinect/sd/image_color_rect/compressed',
-               '/kinect/sd/image_depth_rect/compressed',
+               #'/kinect/qhd/image_depth_rect/compressed',
+               #'/kinect/sd/camera_info',
+               #'/kinect/sd/image_color_rect/compressed',
+               #'/kinect/sd/image_depth_rect/compressed',
                '/vector/right_gripper/stat',
                '/kf_tracker/state',
                '/eef_pose',
-               '/audio']#,
-               #'/beliefs/features']
+               '/audio',
+               '/beliefs/features']
 topics = reduce(lambda x, y: x + ' ' + y, topics_list)
 
 def get_files(path, type=None):
@@ -100,7 +100,7 @@ def main():
         time.sleep(2.0)
 
         # playback bag file
-        subprocess.call(['rosbag', 'play', '--clock', bag_file])
+        subprocess.call(['rosbag', 'play', '--clock', bag_file, '/joint_states:=/joint_states_pre_filtered'])
 
         # stop recording
         stop_record(rosbag_proc)
