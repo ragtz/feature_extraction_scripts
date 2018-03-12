@@ -2,7 +2,7 @@
 
 from geometry_msgs.msg import PointStamped
 from os.path import join, expanduser, splitext, basename
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, medfilt
 from scipy.interpolate import interp1d
 from tf.transformations import compose_matrix
 from tf import TransformerROS
@@ -126,15 +126,30 @@ def get_gripper_position(msg):
 def get_gripper_state(msg):
     return msg.position
 
+'''
 def resample(x, t, min_t, max_t, hz):
     f = interp1d(t, x, kind='linear', axis=0)
     t_rs = np.arange(min_t, max_t, 1.0/hz)
     x_rs = f(t_rs)
     return x_rs, t_rs
+'''
+def resample(x, t, min_t, max_t, hz):
+    t = np.array(t)
+    t_rs = np.arange(min_t, max_t, 1./hz)
+    x_rs = []
 
+    for i in range(len(t_rs)):
+        t_past = np.array(filter(lambda z: z[1] <= 0, enumerate(t - t_rs[i])))
+        x_rs.append(x[int(t_past[:,0][np.argmax(t_past[:,1])])])
+
+    return np.array(x_rs), t_rs
+'''
 def smooth(x):
     b, a = butter(2, 0.125)
     return filtfilt(b, a, x, axis=0, method='gust')
+'''
+def smooth(x):
+    return medfilt(x)
 
 def is_hist(name):
     return '_hist' in name
@@ -152,7 +167,7 @@ def is_obj(name):
 #        list of objects to get histogram features
 #        list of objects to get color features
 # Returns: feature names, features tuple
-def get_feature_vector(state, obj_hists=['pitcher'], obj_colors=['lamp'], obj_volume=['drawer']):
+def get_feature_vector(state, obj_hists=['pitcher','bowl','lamp','drawer'], obj_colors=['lamp','drawer','bowl','pitcher'], obj_volume=['drawer','lamp','bowl','pitcher']):
     table = state['table']
     gripper_position = state['gripper_position']
     gripper_state = state['gripper_state']
@@ -418,7 +433,7 @@ def main():
 
     dataset = {}
     for i, bag_file in enumerate(bag_files):
-        print 'Processing bag file ' + str(i+1) + ' of ' + str(n) + '...'
+        print 'Processing ' + bag_file + ' (' + str(i+1) + '/' + str(n) + ')...'
 
         pid = get_task_name(bag_file)
         task = get_skill_name(bag_file)
