@@ -17,6 +17,8 @@ import pickle
 import rosbag
 import re
 
+resample = resample_clamp
+
 def dist(x, y):
     return np.linalg.norm(np.array(x) - np.array(y))
 
@@ -126,14 +128,7 @@ def get_gripper_position(msg):
 def get_gripper_state(msg):
     return msg.position
 
-'''
-def resample(x, t, min_t, max_t, hz):
-    f = interp1d(t, x, kind='linear', axis=0)
-    t_rs = np.arange(min_t, max_t, 1.0/hz)
-    x_rs = f(t_rs)
-    return x_rs, t_rs
-'''
-def resample(x, t, min_t, max_t, hz):
+def resample_clamp(x, t, min_t, max_t, hz):
     t = np.array(t)
     t_rs = np.arange(min_t, max_t, 1./hz)
     x_rs = []
@@ -143,13 +138,20 @@ def resample(x, t, min_t, max_t, hz):
         x_rs.append(x[int(t_past[:,0][np.argmax(t_past[:,1])])])
 
     return np.array(x_rs), t_rs
-'''
+
+def resample_interp(x, t, min_t, max_t, hz):
+    f = interp1d(t, x, kind='linear', axis=0)
+    t_rs = np.arange(min_t, max_t, 1.0/hz)
+    x_rs = f(t_rs)
+    return x_rs, t_rs
+
 def smooth(x):
     b, a = butter(2, 0.125)
     return filtfilt(b, a, x, axis=0, method='gust')
 '''
 def smooth(x):
     return medfilt(x)
+'''
 
 def is_hist(name):
     return '_hist' in name
@@ -413,10 +415,11 @@ def add_demo(bag_file, dataset, pid, task, object_filters):
 def main():
     parser = argparse.ArgumentParser(description='Compile demonstration data')
     parser.add_argument('--src', metavar='DIR', required=True, help='Path to directory containing bag files')
-    parser.add_argument('--target', metavar='DIR', required=True, help='Path to directory for saved bag files')
+    parser.add_argument('--target', metavar='DIR', required=True, help='Path to directory for saved dataset file')
     parser.add_argument('--filename', metavar='PKL', required=True, help='Name of pkl dataset file')
     parser.add_argument('--filters', metavar='YAML', required=True, help='Path to yaml task filter parameter file')
     parser.add_argument('--tasks', metavar='TASK', nargs='+', default=[], required=False, help='Task to compile')
+    parser.add_argument('--resample', metavar='RSMP', choices=['clamp', 'interp'], default='clamp', required=False, help='Resample type')
     
     args = parser.parse_args()
     src = args.src
@@ -424,6 +427,13 @@ def main():
     filename = join(expanduser('~'), tar, args.filename)
     filters = args.filters
     tasks = args.tasks
+    rsmp_type = args.resample
+
+    global resample
+    if rsmp_type == 'clamp':
+        resample = resample_clamp
+    else:
+        resample = resample_interp
 
     ensure_dir(filename)
 
