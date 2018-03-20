@@ -42,7 +42,7 @@ def main():
                'demo_id': [],
                'kf_idx': [],
                'kf': [],
-               'labels': []}
+               'label': []}
 
     demos = pickle.load(open(demos))
 
@@ -80,9 +80,9 @@ def main():
                     dataset['kf_idx'].append(idx)
                     dataset['kf'].append(kf_feature)
                     if idx in step_kf_idxs:
-                        dataset['labels'].append(1)
+                        dataset['label'].append(1)
                     else:
-                        dataset['labels'].append(0)
+                        dataset['label'].append(0)
 
                 i += 1
 
