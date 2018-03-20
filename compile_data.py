@@ -15,9 +15,13 @@ import itertools
 import argparse
 import pickle
 import rosbag
+import yaml
+import csv
 import re
 
-resample = resample_clamp
+import matplotlib.pyplot as plt
+
+resample = None
 
 def dist(x, y):
     return np.linalg.norm(np.array(x) - np.array(y))
@@ -41,6 +45,65 @@ def transformPoint(p, header, tf, frame='/base_link'):
     p_tf = tf.transformPoint(frame, ps)
     return [p_tf.point.x, p_tf.point.y, p_tf.point.z]
     '''
+
+# Input: steps csv file
+#        demo pid
+#        task name
+# Returns: all ordered indices of demos with pid, task
+def get_step_demo_idxs(steps_file, pid, task):
+    demo_nums = []
+    idxs = []
+    
+    with open(steps_file) as csvfile:
+        reader = csv.DictReader(csvfile)
+        for i, row in enumerate(reader):
+            if int(row['PID']) == int(pid[1:]) and row['Task'] == task:
+                demo_nums.append(int(row['Demo Num']))
+                idxs.append(i)
+
+    return list(np.array(idxs)[np.argsort(demo_nums)])
+
+def check_compatibility(bag_dir, steps_file, tasks):
+    bag_files = sort_by_timestamp(get_files_recursive(bag_dir, dirs_get=tasks, type='bag'))
+    n = len(bag_files)
+
+    # get directory structure into steps object
+    steps = {}
+    for bag_file in bag_files:
+        pid = get_task_name(bag_file)
+        task = get_skill_name(bag_file)
+
+        if not pid in steps:
+            steps[pid] = {}
+
+        if not task in steps[pid]:
+            steps[pid][task] = {}
+
+        demo_num = len(steps[pid][task])
+        demo_id = 'd'+str(demo_num)+'_'+get_timestamp(bag_file)
+
+        steps[pid][task][demo_id] = []
+
+    # load step points
+    step_points = []
+    with open(steps_file) as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            step_points.append(np.array([float(x) for x in row['Step Points'][1:-1].split(',')]))
+
+    # fill steps from steps csv file, throw exception if inconsistent
+    for pid in steps:
+        for task in steps[pid]:
+            bag_demo_ids = sort_by_timestamp(steps[pid][task].keys())
+            step_demo_idxs = get_step_demo_idxs(steps_file, pid, task)
+
+            if len(bag_demo_ids) == len(step_demo_idxs):
+                for i, demo_id in enumerate(bag_demo_ids):
+                    steps[pid][task][demo_id] = step_points[step_demo_idxs[i]]
+            else:
+                raise Exception('Bag directory structure and steps file do not match for pid ' + pid + ' and task ' + task)
+
+    return steps
 
 # Input: ExtractedFeaturesArray msg
 # Returns: PlaneFeatures msg
@@ -286,17 +349,14 @@ def extract_state_time_series(bag_file, object_filters):
     #       target: /kinect_rgb_optical_frame
     tf = compose_matrix(angles=[-2.075, 0, -1.575], translate=[0.358, -0.096, 1.572])
 
-    start_t = float('inf')
     with rosbag.Bag(bag_file) as bag:
-        for _, _, t in bag.read_messages():
-            t = t.to_sec()
-            if t < start_t:
-                start_t = t
+        bag_info = yaml.load(bag._get_yaml_info())
+        start_t = bag_info['start']
 
-    with rosbag.Bag(bag_file) as bag:
         ts = {'table': {'x': [], 't': []},
               'gripper_position': {'x': [], 't': []},
               'gripper_state': {'x': [], 't': []}}
+        
         for name in object_filters:
             ts[name] = {'x': [], 't': []}
             ts[name+'_hist'] = {'x': [], 't': []}
@@ -394,10 +454,70 @@ def extract_feature_time_series(bag_file, object_filters, hz=10):
 
     return fv_names, fv_ts, av_names, av_ts, np.array(t)
 
+# Input: name of bag file
+# Returns: np array of keyframe times
+def get_keyframe_times(bag_file, add_gripper_kfs=True):
+    kf_topic = '/kf_tracker/state'
+    gripper_state_topic = '/vector/right_gripper/stat'
+
+    with rosbag.Bag(bag_file) as bag:
+        bag_info = yaml.load(bag._get_yaml_info())
+        start_t = bag_info['start']
+        end_t = bag_info['end']
+
+        kf = []
+        kf_state = 0
+
+        gripper_state = []
+        gripper_t = []
+
+        for topic, msg, t in bag.read_messages(topics=[kf_topic, gripper_state_topic]):
+            t = t.to_sec()
+
+            if topic == kf_topic:
+                if msg.data != kf_state:
+                    kf.append(t)
+                    kf_state = msg.data
+            else:
+                gripper_state.append(get_gripper_state(msg))
+                gripper_t.append(t)
+
+    if add_gripper_kfs:
+        gripper_state, gripper_t = resample_interp(gripper_state,
+                                                   gripper_t,
+                                                   np.min(gripper_t),
+                                                   np.max(gripper_t),
+                                                   10)
+        gripper_state = smooth(gripper_state)
+
+        d_gripper_state = (gripper_state[1:] - gripper_state[:-1]) / (gripper_t[1:] - gripper_t[:-1])
+        gripper_change = map(lambda x: x > 0.0025, np.abs(d_gripper_state))
+        gripper_change = map(lambda x: x[0] != x[1], zip(gripper_change[:-1], gripper_change[1:]))
+        gripper_change_idxs = [i for i, x in enumerate(gripper_change) if x]
+
+        gripper_kfs = gripper_t[gripper_change_idxs]
+        kf.extend(list(gripper_kfs))
+        kf = np.sort(kf)
+ 
+        ''' 
+        plt.plot(gripper_t, gripper_state)
+        plt.plot(gripper_t[:-1], d_gripper_state)
+        plt.plot(gripper_t[:-1], np.abs(d_gripper_state))
+        plt.plot(gripper_t[:-1], map(lambda x: 0.1 if x > 0.0025 else 0, np.abs(d_gripper_state)))
+        plt.plot(gripper_t[:-2], map(lambda x: 0.1 if x else 0, gripper_change))
+        plt.show()
+        '''
+
+    kf = np.array(kf)
+    kf = kf - start_t
+    kf = np.array([0] + list(kf) + [end_t - start_t])
+
+    return kf
+
 def get_timestamp(f, format='%Y-%m-%dT%H%M%S'):
     return re.split('_', splitext(basename(f))[0])[-1]
 
-def add_demo(bag_file, dataset, pid, task, object_filters):
+def add_demo(bag_file, dataset, pid, task, object_filters, steps=None):
     if not pid in dataset:
         dataset[pid] = {}
 
@@ -405,17 +525,25 @@ def add_demo(bag_file, dataset, pid, task, object_filters):
         dataset[pid][task] = {}
 
     demo_num = len(dataset[pid][task])
+    demo_id = 'd'+str(demo_num)+'_'+get_timestamp(bag_file)
+
+    kf = get_keyframe_times(bag_file)
     state_names, state, action_names, action, t = extract_feature_time_series(bag_file, object_filters) 
-    dataset[pid][task]['d'+str(demo_num)+'_'+get_timestamp(bag_file)] = {'state_names': state_names, 
-                                                                         'state': state,
-                                                                         'action_names': action_names,
-                                                                         'action': action,
-                                                                         't': t}
+    dataset[pid][task][demo_id] = {'state_names': state_names, 
+                                   'state': state,
+                                   'action_names': action_names,
+                                   'action': action,
+                                   't': t,
+                                   'kf': kf}
+
+    if not steps is None:
+        dataset[pid][task][demo_id]['steps'] = steps[pid][task][demo_id]
 
 def main():
     parser = argparse.ArgumentParser(description='Compile demonstration data')
     parser.add_argument('--src', metavar='DIR', required=True, help='Path to directory containing bag files')
     parser.add_argument('--target', metavar='DIR', required=True, help='Path to directory for saved dataset file')
+    parser.add_argument('--steps', metavar='CSV', required=False, help='Name of csv steps file')
     parser.add_argument('--filename', metavar='PKL', required=True, help='Name of pkl dataset file')
     parser.add_argument('--filters', metavar='YAML', required=True, help='Path to yaml task filter parameter file')
     parser.add_argument('--tasks', metavar='TASK', nargs='+', default=[], required=False, help='Task to compile')
@@ -424,6 +552,7 @@ def main():
     args = parser.parse_args()
     src = args.src
     tar = args.target
+    steps = args.steps
     filename = join(expanduser('~'), tar, args.filename)
     filters = args.filters
     tasks = args.tasks
@@ -435,6 +564,9 @@ def main():
     else:
         resample = resample_interp
 
+    if not steps is None:
+        steps = check_compatibility(src, steps, tasks)
+    
     ensure_dir(filename)
 
     task_filters = load_tasks(filters)
@@ -447,7 +579,7 @@ def main():
 
         pid = get_task_name(bag_file)
         task = get_skill_name(bag_file)
-        add_demo(bag_file, dataset, pid, task, task_filters[task])
+        add_demo(bag_file, dataset, pid, task, task_filters[task], steps)
 
     pickle.dump(dataset, open(filename, 'w'))
 
