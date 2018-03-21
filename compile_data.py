@@ -13,6 +13,7 @@ import sensor_msgs.point_cloud2 as pc2
 import numpy as np
 import itertools
 import argparse
+import colorsys
 import pickle
 import rosbag
 import yaml
@@ -176,10 +177,11 @@ def get_object_volume(obj):
     return p.x*p.y*p.z
 
 # Input: ObjectFeatures msg
-# Returns: rgb np array
+# Returns: hsv np array
 def get_object_color(obj):
     rgba = obj.basicInfo.rgba_color
-    return np.array([rgba.r, rgba.g, rgba.b])
+    h, s, v = colorsys.rgb_to_hsv(rgba.r, rgba.g, rgba.b)
+    return np.array([h, s, v])
 
 # Input: Pose msg
 # Returns: position np array
@@ -190,6 +192,14 @@ def get_gripper_position(msg):
 # Returns: open gripper state
 def get_gripper_state(msg):
     return msg.position
+
+def get_force(msg):
+    force = msg.wrench.force
+    return np.array([force.x, force.y, force.z])
+
+def get_torque(msg):
+    torque = msg.wrench.torque
+    return np.array([torque.x, torque.y, torque.z])
 
 def resample_clamp(x, t, min_t, max_t, hz):
     t = np.array(t)
@@ -232,10 +242,15 @@ def is_obj(name):
 #        list of objects to get histogram features
 #        list of objects to get color features
 # Returns: feature names, features tuple
-def get_feature_vector(state, obj_hists=['pitcher','bowl','lamp','drawer'], obj_colors=['lamp','drawer','bowl','pitcher'], obj_volume=['drawer','lamp','bowl','pitcher']):
+def get_feature_vector(state, 
+                       obj_hists=['pitcher','bowl','lamp','drawer','large_bowl','small_bowl','spoon'],
+                       obj_colors=['lamp','drawer','bowl','pitcher', 'small_bowl', 'large_bowl', 'spoon'],
+                       obj_volume=['drawer','lamp','bowl','pitcher', 'large_bowl', 'small_bowl', 'spoon']):
     table = state['table']
     gripper_position = state['gripper_position']
     gripper_state = state['gripper_state']
+    force = state['force']
+    torque = state['torque']
     objs = {name: state[name] for name in state if not name in ['table', 'gripper_position', 'gripper_state']}
 
     feature_names = []
@@ -264,6 +279,14 @@ def get_feature_vector(state, obj_hists=['pitcher','bowl','lamp','drawer'], obj_
     # gripper state
     feature_names.append('gripper_state')
     features.append(gripper_state)
+
+    # force
+    feature_names.extend(['force_x', 'force_y', 'force_z'])
+    features.extend(list(force))
+
+    # torque
+    feature_names.extend(['torque_x', 'torque_y', 'torque_z'])
+    features.extend(list(torque))
 
     # hist features
     for name in obj_hists:
@@ -336,6 +359,7 @@ def extract_state_time_series(bag_file, object_filters):
     features_topic = '/beliefs/features'
     eef_topic = '/eef_pose'
     gripper_state_topic = '/vector/right_gripper/stat'
+    force_topic = '/j2s7s300_driver/out/tool_wrench'
 
     '''
     tf = TransformerROS()
@@ -355,7 +379,9 @@ def extract_state_time_series(bag_file, object_filters):
 
         ts = {'table': {'x': [], 't': []},
               'gripper_position': {'x': [], 't': []},
-              'gripper_state': {'x': [], 't': []}}
+              'gripper_state': {'x': [], 't': []},
+              'force': {'x': [], 't': []},
+              'torque': {'x': [], 't': []}}
         
         for name in object_filters:
             ts[name] = {'x': [], 't': []}
@@ -363,7 +389,7 @@ def extract_state_time_series(bag_file, object_filters):
             ts[name+'_color'] = {'x': [], 't': []}
             ts[name+'_volume'] = {'x': [], 't': []}
 
-        for topic, msg, t in bag.read_messages(topics=[features_topic, eef_topic, gripper_state_topic]):
+        for topic, msg, t in bag.read_messages(topics=[features_topic, eef_topic, gripper_state_topic, force_topic]):
             t = t.to_sec()
             if topic == features_topic:
                 table = get_table(msg)
@@ -397,14 +423,26 @@ def extract_state_time_series(bag_file, object_filters):
                 ts['gripper_position']['x'].append(gripper_position)
                 ts['gripper_position']['t'].append(t)
 
-            else:
+            elif topic == gripper_state_topic:
                 gripper_state = get_gripper_state(msg)
                 ts['gripper_state']['x'].append(gripper_state)
                 ts['gripper_state']['t'].append(t)
 
+            else:
+                force = get_force(msg)
+                torque = get_torque(msg)
+
+                ts['force']['x'].append(force)
+                ts['force']['t'].append(t)
+
+                ts['torque']['x'].append(torque)
+                ts['torque']['t'].append(t)                
+
     make_np(ts['table'])
     make_np(ts['gripper_position'])
     make_np(ts['gripper_state'])
+    make_np(ts['force'])
+    make_np(ts['torque'])
     for name in object_filters:
         make_np(ts[name])
         make_np(ts[name+'_hist'])
@@ -415,6 +453,8 @@ def extract_state_time_series(bag_file, object_filters):
     ts['table']['t'] -= start_t
     ts['gripper_position']['t'] -= start_t
     ts['gripper_state']['t'] -= start_t
+    ts['force']['t'] -= start_t
+    ts['torque']['t'] -= start_t
     for name in object_filters:
         ts[name]['t'] -= start_t
         ts[name+'_hist']['t'] -= start_t
