@@ -34,6 +34,10 @@ class KeyframeDataset(object):
 
         return vals
 
+    def _make_np(self, d):
+        for k in d:
+            d[k] = np.array(d[k])
+
     def _check_nonempty(self):
         if self.data is None:
             raise Exception('No data in keyframe dataset')
@@ -52,8 +56,8 @@ class KeyframeDataset(object):
         return dataset
 
     def _get_dataset(self, **kwargs):
-        pids = self._get_kwvals('pid', kwargs)
-        tasks = self._get_kwvals('task', kwargs)
+        pids = self._get_kwvals('pid', **kwargs)
+        tasks = self._get_kwvals('task', **kwargs)
         dataset = self._get_empty_dataset()
 
         for i in range(self.n):
@@ -66,6 +70,8 @@ class KeyframeDataset(object):
 
             if pid in pids and task in tasks:
                 self._add_data(dataset, pid, task, demo_id, kf_idx, kf, label)
+
+        self._make_np(dataset)
        
         return dataset 
 
@@ -78,7 +84,7 @@ class KeyframeDataset(object):
         dataset['label'].append(label)
     
     def _get_feature_label(self, **kwargs):
-        data = self.get_dataset(kwargs)
+        data = self._get_dataset(**kwargs)
         return (data['kf'], data['label'])
 
     def _iter_subsets(self, l, m):
@@ -98,7 +104,7 @@ class KeyframeDataset(object):
 
     def get_keyframe_dataset(self, **kwargs):
         self._check_nonempty()
-        dataset = self._get_dataset(kwargs)
+        dataset = self._get_dataset(**kwargs)
         return KeyframeDataset(dataset)
 
     def iter_train_test(self, m):
@@ -106,6 +112,7 @@ class KeyframeDataset(object):
         self._check_subset_size(self.pids, m)
 
         for pid_train_subset in self._iter_subsets(self.pids, m):
+            pid_train_subset = list(pid_train_subset)
             pid_test_subset = list(set(self.pids) - set(pid_train_subset))
 
             yield self._get_feature_label(pid=pid_train_subset), self._get_feature_label(pid=pid_test_subset)
