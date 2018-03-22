@@ -235,8 +235,14 @@ def is_color(name):
 def is_volume(name):
     return '_volume' in name
 
+def is_force(name):
+    return 'force' in name
+
+def is_torque(name):
+    return 'torque' in name
+
 def is_obj(name):
-    return not is_hist(name) and not is_color(name) and not is_volume(name)
+    return not is_hist(name) and not is_color(name) and not is_volume(name) and not is_force(name) and not is_torque(name)
 
 # Input: state dictionary of form {'name': np.array([0,0,0]), ...}
 #        list of objects to get histogram features
