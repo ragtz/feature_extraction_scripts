@@ -40,7 +40,7 @@ def plot_seg(demos, kf_sets, step_sets, pids=None, title=''):
 def main():
     data_file = sys.argv[1]
     target_task = sys.argv[2]
-    data = pickle.load(data_file)
+    data = pickle.load(open(data_file))
 
     pids = []
     demos = []
@@ -54,12 +54,15 @@ def main():
                     demo = data[pid][task][demo_id]
                     g_idx = np.where(demo['state_names'] == 'gripper_state')[0]
 
-                    pids.append(pid)
-                    demos.append(demo['state'][:,g_idx])
-                    kf.append(demo['kf'])
-                    step.append(demo['step'])
+                    grip = {'t': demo['t'],
+                            'x': demo['state'][:,g_idx]}
 
-    plot_seg(demos, kf, step, pids, task)
+                    pids.append(pid)
+                    demos.append(grip)
+                    kf.append(demo['kf'])
+                    step.append(demo['steps'])
+
+    plot_seg(demos, kf, step, pids, target_task)
     plt.show()
 
 if __name__ == '__main__':
