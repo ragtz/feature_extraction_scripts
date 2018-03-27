@@ -10,13 +10,16 @@ import pickle
 import sys
 
 feature_names = {'drawer': ['table_drawer_dist', 'gripper_drawer_dist', 'gripper_state',
+                            'force_x', 'force_y', 'force_z', 'torque_x', 'torque_y', 'torque_z',
                             'drawer_hist_0', 'drawer_hist_1', 'drawer_hist_2', 'drawer_color_0',
                             'drawer_color_1', 'drawer_color_2', 'drawer_volume'],
-                 'lamp': ['table_lamp_dist', 'gripper_lamp_dist', 'gripper_state',
+                 'lamp': ['table_lamp_dist', 'gripper_lamp_dist', 'gripper_state', 'force_x',
+                          'force_y', 'force_z', 'torque_x', 'torque_y', 'torque_z',
                           'lamp_hist_0', 'lamp_hist_1', 'lamp_hist_2', 'lamp_color_0',
                           'lamp_color_1', 'lamp_color_2', 'lamp_volume'],
-                 'pitcher': ['pitcher_bowl_dist', 'table_pitcher_dist', 'table_bowl_dist',
-                             'gripper_pitcher_dist', 'gripper_bowl_dist', 'gripper_state',
+                 'pitcher': ['bowl_pitcher_dist', 'table_bowl_dist', 'table_pitcher_dist',
+                             'gripper_bowl_dist', 'gripper_pitcher_dist', 'gripper_state',
+                             'force_x', 'force_y', 'force_z', 'torque_x', 'torque_y', 'torque_z',
                              'pitcher_hist_0', 'pitcher_hist_1', 'pitcher_hist_2', 'bowl_hist_0',
                              'bowl_hist_1', 'bowl_hist_2', 'bowl_color_0', 'bowl_color_1',
                              'bowl_color_2', 'pitcher_color_0', 'pitcher_color_1',
@@ -25,7 +28,15 @@ feature_names = {'drawer': ['table_drawer_dist', 'gripper_drawer_dist', 'gripper
                           'spoon_small_bowl_dist', 'table_large_bowl_dist',
                           'table_spoon_dist', 'table_small_bowl_dist',
                           'gripper_large_bowl_dist', 'gripper_spoon_dist',
-                          'gripper_small_bowl_dist', 'gripper_state']}
+                          'gripper_small_bowl_dist', 'gripper_state', 'force_x', 'force_y',
+                          'force_z', 'torque_x', 'torque_y', 'torque_z', 'large_bowl_hist_0',
+                          'large_bowl_hist_1', 'large_bowl_hist_2', 'small_bowl_hist_0',
+                          'small_bowl_hist_1', 'small_bowl_hist_2', 'spoon_hist_0',
+                          'spoon_hist_1', 'spoon_hist_2', 'small_bowl_color_0',
+                          'small_bowl_color_1', 'small_bowl_color_2', 'large_bowl_color_0',
+                          'large_bowl_color_1', 'large_bowl_color_2', 'spoon_color_0',
+                          'spoon_color_1', 'spoon_color_2', 'large_bowl_volume',
+                          'small_bowl_volume', 'spoon_volume']}
 
 def main():
     data_file = sys.argv[1]
