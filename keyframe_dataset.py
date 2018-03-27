@@ -115,5 +115,5 @@ class KeyframeDataset(object):
             pid_train_subset = list(pid_train_subset)
             pid_test_subset = list(set(self.pids) - set(pid_train_subset))
 
-            yield self._get_feature_label(pid=pid_train_subset), self._get_feature_label(pid=pid_test_subset)
+            yield (pid_train_subset, self._get_feature_label(pid=pid_train_subset)), (pid_test_subset, self._get_feature_label(pid=pid_test_subset))
 
