@@ -19,6 +19,9 @@ def get_task_name(f):
 def get_skill_name(f):
     return f.split('/')[-2]
 
+def get_timestamp(f, format='%Y-%m-%dT%H%M%S'):
+    return re.split('_', splitext(basename(f))[0])[-1]
+
 def get_filename(f):
     return f.split('/')[-1]
 
