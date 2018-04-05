@@ -107,6 +107,12 @@ class KeyframeDataset(object):
         dataset = self._get_dataset(**kwargs)
         return KeyframeDataset(dataset)
 
+    def get_keyframes(self):
+        return self.data['kf']
+
+    def get_labels(self):
+        return self.data['label']
+
     def iter_train_test(self, m):
         self._check_nonempty()
         self._check_subset_size(self.pids, m)
