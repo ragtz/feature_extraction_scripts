@@ -528,13 +528,13 @@ def get_steps(steps_file):
             pid = 'p'+'{:0>2d}'.format(int(row['PID']))
             task = row['Task']
             demo_num = int(row['Demo Num'])
-            step_points = np.array([float(x) for x in row['Step Points'][1:-1].split(',')]))
+            step_points = np.array([float(x) for x in row['Step Points'][1:-1].split(',')])
 
-            if not pid in demos:
-                demos[pid] = {}
+            if not pid in steps:
+                steps[pid] = {}
 
-            if not task in demos[pid]:
-                demos[pid][task] = {}
+            if not task in steps[pid]:
+                steps[pid][task] = {}
 
             steps[pid][task][demo_num] = step_points
 
