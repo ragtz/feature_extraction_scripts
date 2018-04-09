@@ -560,10 +560,31 @@ def get_keyframe_times(bag_file, add_gripper_kfs=True):
 
     return kf
 
-def get_timestamp(f, format='%Y-%m-%dT%H%M%S'):
-    return re.split('_', splitext(basename(f))[0])[-1]
+def get_demo_dict(steps_file):
+    demos = {}
 
-def add_demo(bag_file, dataset, pid, task, object_filters, steps=None):
+    with open(steps_file) as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            pid = 'p'+'{:0>2d}'.format(int(row['PID']))
+            task = row['Task']
+            demo_num = int(row['Demo Num'])
+
+            if not pid in demos:
+                demos[pid] = {}
+
+            if not task in demos[pid]:
+                demos[pid][task] = []
+
+            demos[pid][task].append(demo_num)
+
+    for pid in demos:
+        for task in demos[pid]:
+            demos[pid][task] = sorted(demos[pid][task])
+
+    return demos
+
+def add_demo(bag_file, dataset, pid, task, demo_id, object_filters, steps=None):
     if not pid in dataset:
         dataset[pid] = {}
 
@@ -571,7 +592,6 @@ def add_demo(bag_file, dataset, pid, task, object_filters, steps=None):
         dataset[pid][task] = {}
 
     demo_num = len(dataset[pid][task])
-    demo_id = 'd'+str(demo_num)+'_'+get_timestamp(bag_file)
 
     kf = get_keyframe_times(bag_file)
     state_names, state, action_names, action, t = extract_feature_time_series(bag_file, object_filters) 
@@ -615,6 +635,16 @@ def main():
     
     ensure_dir(filename)
 
+    demos = get_demo_dict(steps)
+    demos_cnt = {}
+    for pid in demos:
+        for task in demos[pid]:
+            if not pid in demos_cnt:
+                demos_cnt[pid] = {}
+            
+            if not task in demos_cnt[pid]:
+                demos_cnt[pid][task] = 0
+
     task_filters = load_tasks(filters)
     bag_files = sort_by_timestamp(get_files_recursive(src, dirs_get=tasks, type='bag'))
     n = len(bag_files)
@@ -625,7 +655,12 @@ def main():
 
         pid = get_task_name(bag_file)
         task = get_skill_name(bag_file)
-        add_demo(bag_file, dataset, pid, task, task_filters[task], steps)
+        demo_idx = demos_cnt[pid][task]
+        demo_id = 'd'+str(demos[pid][task][demo_idx])+'_'+get_timestamp(bag_file)
+
+        add_demo(bag_file, dataset, pid, task, demo_id, task_filters[task], steps)
+
+        demos_cnt[pid][task] += 1
 
     pickle.dump(dataset, open(filename, 'w'))
 
