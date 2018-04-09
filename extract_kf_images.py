@@ -5,6 +5,7 @@ from sensor_msgs.msg import CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
 from scipy.signal import butter, filtfilt
 from scipy.interpolate import interp1d
+from demo_file_utils import *
 from fetch_files import *
 import numpy as np
 import argparse
@@ -130,59 +131,6 @@ def get_keyframe_images(bag_file):
     '''
 
     return kf_imgs, kf
-
-def increment_demos(d, pid, task):
-    if not pid in d:
-        d[pid] = {}
-
-    if not task in d[pid]:
-        d[pid][task] = 0
-
-    d[pid][task] += 1
-
-def check_compatibility(bag_dir, steps_file):
-    bag_files = sort_by_timestamp(get_files_recursive(bag_dir, type='bag'))
-    n = len(bag_files)
-
-    # get num demos per pid/task from bag directory
-    bag_demos = {}
-    for bag_file in bag_files:
-        pid = get_task_name(bag_file)
-        task = get_skill_name(bag_file)
-        increment_demos(bag_demos, pid, task)
-
-    # get num demos per pid/task from steps csv file
-    csv_demos = {}
-    with open(steps_file) as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            pid = 'p'+'{:0>2d}'.format(int(row['PID']))
-            task = row['Task']
-            increment_demos(csv_demos, pid, task)
-
-    # iterate through bag and csv num demos, throw exception if inconsistent
-    # check that pids match
-    bag_pids = bag_demos.keys()
-    csv_pids = csv_demos.keys()
-    if bag_pids != csv_pids:
-        raise Exception('PIDs differ between bag directory and steps file')
-
-    # check that tasks per pid match
-    for pid in bag_demos:
-        bag_tasks = bag_demos[pid].keys()
-        csv_tasks = csv_demos[pid].keys()
-
-        if bag_tasks != csv_tasks:
-            raise Exception('Tasks differ between bag directory and steps file for pid ' + pid)
-
-    # check that num demos per pid/task match
-    for pid in bag_demos:
-        for task in bag_demos[pid]:
-            bag_n = bag_demos[pid][task]
-            csv_n = csv_demos[pid][task]
-
-            if bag_n != csv_n:
-                raise Exception('Number of demos differ between bag directory and steps file for pid ' + pid + ' and task ' + task)
 
 def get_demo_dict(steps_file):
     demos = {}
