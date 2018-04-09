@@ -8,6 +8,7 @@ from tf.transformations import compose_matrix
 from tf import TransformerROS
 from yaml_include_loader.loader import *
 from object_filters import *
+from demo_file_utils import *
 from fetch_files import *
 import sensor_msgs.point_cloud2 as pc2
 import numpy as np
@@ -63,48 +64,6 @@ def get_step_demo_idxs(steps_file, pid, task):
                 idxs.append(i)
 
     return list(np.array(idxs)[np.argsort(demo_nums)])
-
-def check_compatibility(bag_dir, steps_file, tasks):
-    bag_files = sort_by_timestamp(get_files_recursive(bag_dir, dirs_get=tasks, type='bag'))
-    n = len(bag_files)
-
-    # get directory structure into steps object
-    steps = {}
-    for bag_file in bag_files:
-        pid = get_task_name(bag_file)
-        task = get_skill_name(bag_file)
-
-        if not pid in steps:
-            steps[pid] = {}
-
-        if not task in steps[pid]:
-            steps[pid][task] = {}
-
-        demo_num = len(steps[pid][task])
-        demo_id = 'd'+str(demo_num)+'_'+get_timestamp(bag_file)
-
-        steps[pid][task][demo_id] = []
-
-    # load step points
-    step_points = []
-    with open(steps_file) as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            step_points.append(np.array([float(x) for x in row['Step Points'][1:-1].split(',')]))
-
-    # fill steps from steps csv file, throw exception if inconsistent
-    for pid in steps:
-        for task in steps[pid]:
-            bag_demo_ids = sort_by_timestamp(steps[pid][task].keys())
-            step_demo_idxs = get_step_demo_idxs(steps_file, pid, task)
-
-            if len(bag_demo_ids) == len(step_demo_idxs):
-                for i, demo_id in enumerate(bag_demo_ids):
-                    steps[pid][task][demo_id] = step_points[step_demo_idxs[i]]
-            else:
-                raise Exception('Bag directory structure and steps file do not match for pid ' + pid + ' and task ' + task)
-
-    return steps
 
 # Input: ExtractedFeaturesArray msg
 # Returns: PlaneFeatures msg
@@ -560,8 +519,8 @@ def get_keyframe_times(bag_file, add_gripper_kfs=True):
 
     return kf
 
-def get_demo_dict(steps_file):
-    demos = {}
+def get_steps(steps_file):
+    steps = {}
 
     with open(steps_file) as csvfile:
         reader = csv.DictReader(csvfile)
@@ -569,29 +528,24 @@ def get_demo_dict(steps_file):
             pid = 'p'+'{:0>2d}'.format(int(row['PID']))
             task = row['Task']
             demo_num = int(row['Demo Num'])
+            step_points = np.array([float(x) for x in row['Step Points'][1:-1].split(',')]))
 
             if not pid in demos:
                 demos[pid] = {}
 
             if not task in demos[pid]:
-                demos[pid][task] = []
+                demos[pid][task] = {}
 
-            demos[pid][task].append(demo_num)
+            steps[pid][task][demo_num] = step_points
 
-    for pid in demos:
-        for task in demos[pid]:
-            demos[pid][task] = sorted(demos[pid][task])
+    return steps
 
-    return demos
-
-def add_demo(bag_file, dataset, pid, task, demo_id, object_filters, steps=None):
+def add_demo(bag_file, dataset, pid, task, demo_id, object_filters, steps):
     if not pid in dataset:
         dataset[pid] = {}
 
     if not task in dataset[pid]:
         dataset[pid][task] = {}
-
-    demo_num = len(dataset[pid][task])
 
     kf = get_keyframe_times(bag_file)
     state_names, state, action_names, action, t = extract_feature_time_series(bag_file, object_filters) 
@@ -602,14 +556,13 @@ def add_demo(bag_file, dataset, pid, task, demo_id, object_filters, steps=None):
                                    't': t,
                                    'kf': kf}
 
-    if not steps is None:
-        dataset[pid][task][demo_id]['steps'] = steps[pid][task][demo_id]
+    dataset[pid][task][demo_id]['steps'] = steps
 
 def main():
     parser = argparse.ArgumentParser(description='Compile demonstration data')
     parser.add_argument('--src', metavar='DIR', required=True, help='Path to directory containing bag files')
     parser.add_argument('--target', metavar='DIR', required=True, help='Path to directory for saved dataset file')
-    parser.add_argument('--steps', metavar='CSV', required=False, help='Name of csv steps file')
+    parser.add_argument('--steps', metavar='CSV', required=True, help='Name of csv steps file')
     parser.add_argument('--filename', metavar='PKL', required=True, help='Name of pkl dataset file')
     parser.add_argument('--filters', metavar='YAML', required=True, help='Path to yaml task filter parameter file')
     parser.add_argument('--tasks', metavar='TASK', nargs='+', default=[], required=False, help='Task to compile')
@@ -630,15 +583,14 @@ def main():
     else:
         resample = resample_interp
 
-    if not steps is None:
-        steps = check_compatibility(src, steps, tasks)
+    check_compatibility(src, steps, tasks)
+    steps = get_steps(steps)
     
     ensure_dir(filename)
 
-    demos = get_demo_dict(steps)
     demos_cnt = {}
-    for pid in demos:
-        for task in demos[pid]:
+    for pid in steps:
+        for task in steps[pid]:
             if not pid in demos_cnt:
                 demos_cnt[pid] = {}
             
@@ -655,10 +607,12 @@ def main():
 
         pid = get_task_name(bag_file)
         task = get_skill_name(bag_file)
-        demo_idx = demos_cnt[pid][task]
-        demo_id = 'd'+str(demos[pid][task][demo_idx])+'_'+get_timestamp(bag_file)
 
-        add_demo(bag_file, dataset, pid, task, demo_id, task_filters[task], steps)
+        demo_idx = demos_cnt[pid][task]
+        demo_num = steps[pid][task].keys()[demo_idx]
+        demo_id = 'd'+str(demo_num)+'_'+get_timestamp(bag_file)
+
+        add_demo(bag_file, dataset, pid, task, demo_id, task_filters[task], steps[pid][task][demo_num])
 
         demos_cnt[pid][task] += 1
 
