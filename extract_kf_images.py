@@ -113,55 +113,27 @@ def get_gripper_keyframes(bag_file):
 
     return list(g_kf)
 
-def get_keyframe_images(bag_file):
-    imgs, img_t = get_images(bag_file)
+def get_all_keyframes(bag_file):
     kf = get_keyframes(bag_file)
     g_kf = get_gripper_keyframes(bag_file)
 
     kf = kf + g_kf
     kf = np.sort(kf)
 
+    return kf
+
+def get_keyframe_images(bag_file):
+    kf = get_all_keyframes(bag_file)
+    imgs, img_t = get_images(bag_file)
     kf_imgs = get_x_at_t(imgs, img_t, kf)
-
-    '''
-    kf_imgs = []
-    for t in kf:
-        idx = np.argmin(np.abs(img_t - t))
-        kf_imgs.append(imgs[idx])
-    '''
-
     return kf_imgs, kf
-
-def get_demo_dict(steps_file):
-    demos = {}
-    
-    with open(steps_file) as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            pid = 'p'+'{:0>2d}'.format(int(row['PID']))
-            task = row['Task']
-            demo_num = int(row['Demo Num'])
-
-            if not pid in demos:
-                demos[pid] = {}
-
-            if not task in demos[pid]:
-                demos[pid][task] = []
-
-            demos[pid][task].append(demo_num)
-
-    for pid in demos:
-        for task in demos[pid]:
-            demos[pid][task] = sorted(demos[pid][task])
-
-    return demos
 
 def main():
     parser = argparse.ArgumentParser(description='Extract images at keyframes')
     parser.add_argument('--robot_src', metavar='DIR', required=True, help='Path to directory containing robot bag files')
     parser.add_argument('--vid_src', metavar='DIR', required=True, help='Path to directory containing third-person video bag files')
     parser.add_argument('--target', metavar='DIR', required=True, help='Path to directory for saved images')
-    parser.add_argument('--steps', metavar='CSV', required=True, help='Name of csv steps file')
+    parser.add_argument('--steps', metavar='CSV', required=True, help='Path to csv steps file')
 
     args = parser.parse_args()
     r_src = args.robot_src
@@ -188,7 +160,7 @@ def main():
     n = len(r_bag_files)
 
     for i, bag_file in enumerate(r_bag_files):
-        print 'Processing ' + bag_file + ' (' + str(i) + '/' + str(n) + ')...'
+        print 'Processing ' + bag_file + ' (' + str(i+1) + '/' + str(n) + ')...'
 
         pid = get_task_name(bag_file)
         task = get_skill_name(bag_file)
