@@ -519,27 +519,6 @@ def get_keyframe_times(bag_file, add_gripper_kfs=True):
 
     return kf
 
-def get_steps(steps_file):
-    steps = {}
-
-    with open(steps_file) as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            pid = 'p'+'{:0>2d}'.format(int(row['PID']))
-            task = row['Task']
-            demo_num = int(row['Demo Num'])
-            step_points = np.array([float(x) for x in row['Step Points'][1:-1].split(',')]))
-
-            if not pid in demos:
-                demos[pid] = {}
-
-            if not task in demos[pid]:
-                demos[pid][task] = {}
-
-            steps[pid][task][demo_num] = step_points
-
-    return steps
-
 def add_demo(bag_file, dataset, pid, task, demo_id, object_filters, steps):
     if not pid in dataset:
         dataset[pid] = {}
