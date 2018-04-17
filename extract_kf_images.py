@@ -101,10 +101,10 @@ def get_gripper_keyframes(bag_file):
     g_t = np.array(g_t)
     g_t = g_t - start_t
         
-    g_state, g_t = resample_interp(g_state, g_t, np.min(g_t), np.max(g_t), 10)
     g_state = smooth(g_state)
+    g_state, g_t = resample_interp(g_state, g_t, np.min(g_t), np.max(g_t), 10)
 
-    d_g_state = (g_state[1:] - g_state[:-1]) / (g_t[1:] - g_t[:-1])
+    d_g_state = smooth((g_state[1:] - g_state[:-1]) / (g_t[1:] - g_t[:-1]))
     g_change = map(lambda x: x > 0.0025, np.abs(d_g_state))
     g_change = map(lambda x: x[0] != x[1], zip(g_change[:-1], g_change[1:]))
     g_change_idxs = [i for i, x in enumerate(g_change) if x]
