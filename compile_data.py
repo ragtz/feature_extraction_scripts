@@ -488,14 +488,14 @@ def get_keyframe_times(bag_file, add_gripper_kfs=True):
                 gripper_t.append(t)
 
     if add_gripper_kfs:
+        gripper_state = smooth(gripper_state)
         gripper_state, gripper_t = resample_interp(gripper_state,
                                                    gripper_t,
                                                    np.min(gripper_t),
                                                    np.max(gripper_t),
                                                    10)
-        gripper_state = smooth(gripper_state)
 
-        d_gripper_state = (gripper_state[1:] - gripper_state[:-1]) / (gripper_t[1:] - gripper_t[:-1])
+        d_gripper_state = smooth((gripper_state[1:] - gripper_state[:-1]) / (gripper_t[1:] - gripper_t[:-1]))
         gripper_change = map(lambda x: x > 0.0025, np.abs(d_gripper_state))
         gripper_change = map(lambda x: x[0] != x[1], zip(gripper_change[:-1], gripper_change[1:]))
         gripper_change_idxs = [i for i, x in enumerate(gripper_change) if x]
