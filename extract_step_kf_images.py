@@ -41,7 +41,7 @@ def main():
 
     n = len(r_bag_files)
 
-    for i, bag_files in enumerate(zip(r_bag_files, v_bag_file)):
+    for i, bag_files in enumerate(zip(r_bag_files, v_bag_files)):
         r_bag_file, v_bag_file = bag_files
         print 'Processing ' + r_bag_file + '(' + str(i+1) + '/' + str(n) + ')...'
 
