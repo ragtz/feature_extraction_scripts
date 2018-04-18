@@ -114,7 +114,7 @@ def adjust_time_to_ref(start_ref, start_query, t_query):
     def f(x):
         return x + (start_query - start_ref)
 
-    if isintance(t_query, collections.Iterable):
+    if isinstance(t_query, collections.Iterable):
         return np.array([f(t) for t in t_query])
     else:
         return f(t_query)

@@ -176,7 +176,7 @@ def main():
 
         for j, imgs in enumerate(zip(r_imgs, v_imgs)):
             r_img, v_img = imgs
-            img_name = 'kf_'+str(j)+'_'+str(float('{0:.3f}'.format(t[j])))+'.png'
+            img_name = 'kf_'+str(j)+'_'+str(float('{0:.3f}'.format(kf[j])))+'.png'
             
             r_filename = join(expanduser('~'), tar, 'robot', pid, task, demo_id, img_name)
             v_filename = join(expanduser('~'), tar, 'vid', pid, task, demo_id, img_name)
