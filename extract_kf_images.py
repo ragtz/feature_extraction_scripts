@@ -168,15 +168,15 @@ def main():
         demo_idx = demos_cnt[pid][task]
         demo_id = 'd'+str(demos[pid][task][demo_idx])+'_'+get_timestamp(r_bag_file)
 
-        r_imgs, kf = get_keyframe_images(r_bag_file) # in robot time
-        kf = adjust_kf_to_ref(v_bag_file, r_bag_file, kf) # in vid time
+        r_imgs, r_kf = get_keyframe_images(r_bag_file) # in robot time
+        v_kf = adjust_kf_to_ref(v_bag_file, r_bag_file, r_kf) # in vid time
         
         v_imgs, v_t = get_images(v_bag_file, compressed=False, img_topic='/usb_cam/image_raw')
-        v_imgs = get_x_at_t(v_imgs, v_t, kf)
+        v_imgs = get_x_at_t(v_imgs, v_t, v_kf)
 
         for j, imgs in enumerate(zip(r_imgs, v_imgs)):
             r_img, v_img = imgs
-            img_name = 'kf_'+str(j)+'_'+str(float('{0:.3f}'.format(kf[j])))+'.png'
+            img_name = 'kf_'+str(j)+'_'+str(float('{0:.3f}'.format(r_kf[j])))+'.png'
             
             r_filename = join(expanduser('~'), tar, 'robot', pid, task, demo_id, img_name)
             v_filename = join(expanduser('~'), tar, 'vid', pid, task, demo_id, img_name)

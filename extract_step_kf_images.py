@@ -52,20 +52,21 @@ def main():
         demo_num = steps[pid][task].keys()[demo_idx]
         demo_id = 'd'+str(demo_num)+'_'+get_timestamp(r_bag_file)
 
-        step_t = steps[pid][task][demo_num] # in vid time
+        v_step_t = steps[pid][task][demo_num] # in vid time
+        r_step_t = adjust_kf_to_ref(r_bag_file, v_bag_file, steps[pid][task][demo_num]) # in robot time
 
         v_imgs, v_t = get_images(v_bag_file, compressed=False, img_topic='/usb_cam/image_raw')
-        step_imgs = get_x_at_t(v_imgs, v_t, step_t)
+        step_imgs = get_x_at_t(v_imgs, v_t, v_step_t)
 
-        kf = get_all_keyframes(r_bag_file) # in robot time
-        kf = adjust_kf_to_ref(v_bag_file, r_bag_file, kf) # in vid time
+        r_kf = get_all_keyframes(r_bag_file) # in robot time
+        v_kf = adjust_kf_to_ref(v_bag_file, r_bag_file, r_kf) # in vid time
 
-        kf_imgs = get_x_at_t(v_imgs, v_t, kf)
-        kf_imgs = get_x_at_t(kf_imgs, kf, step_t)
+        kf_imgs = get_x_at_t(v_imgs, v_t, v_kf)
+        kf_imgs = get_x_at_t(kf_imgs, v_kf, v_step_t)
 
         for j, imgs in enumerate(zip(step_imgs, kf_imgs)):
             step_img, kf_img = imgs
-            step_dir = 'step_'+str(j)+'_'+str(float('{0:.3f}'.format(step_t[j])))
+            step_dir = 'step_'+str(j)+'_'+str(float('{0:.3f}'.format(r_step_t[j])))
 
             #step_filename = join(expanduser('~'), tar, pid, task, demo_id, step_dir, 'step.png')
             #kf_filename = join(expanduser('~'), tar, pid, task, demo_id, step_dir, 'kf.png')
