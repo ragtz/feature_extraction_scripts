@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
 from fetch_files import *
+import collections
+import rosbag
+import yaml
 import csv
 
 def increment_demos(d, pid, task):
@@ -100,4 +103,24 @@ def get_demo_dict(steps_file):
             demos[pid][task] = sorted(demos[pid][task])
 
     return demos
+
+def get_bag_start(bag_file):
+    with rosbag.Bag(bag_file) as bag:
+        bag_info = yaml.load(bag._get_yaml_info())
+        start = bag_info['start']
+    return start
+
+def adjust_time_to_ref(start_ref, start_query, t_query):
+    def f(x):
+        return x + (start_query - start_ref)
+
+    if isintance(t_query, collections.Iterable):
+        return np.array([f(t) for t in t_query])
+    else:
+        return f(t_query)
+
+def adjust_kf_to_ref(ref_bag, query_bag, kf):
+    start_ref = get_bag_start(ref_bag)
+    start_query = get_bag_start(query_bag)
+    return adjust_time_to_ref(start_ref, start_query, kf)
 

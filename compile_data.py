@@ -539,7 +539,8 @@ def add_demo(bag_file, dataset, pid, task, demo_id, object_filters, steps):
 
 def main():
     parser = argparse.ArgumentParser(description='Compile demonstration data')
-    parser.add_argument('--src', metavar='DIR', required=True, help='Path to directory containing bag files')
+    parser.add_argument('--robot_src', metavar='DIR', required=True, help='Path to directory containing robot bag files')
+    parser.add_argument('--vid_src', metavar='DIR', required=True, help='Path to directory containing third-person video bag files')
     parser.add_argument('--target', metavar='DIR', required=True, help='Path to directory for saved dataset file')
     parser.add_argument('--steps', metavar='CSV', required=True, help='Name of csv steps file')
     parser.add_argument('--filename', metavar='PKL', required=True, help='Name of pkl dataset file')
@@ -548,7 +549,8 @@ def main():
     parser.add_argument('--resample', metavar='RSMP', choices=['clamp', 'interp'], default='clamp', required=False, help='Resample type')
     
     args = parser.parse_args()
-    src = args.src
+    r_src = args.robot_src
+    v_src = args.vid_src
     tar = args.target
     steps = args.steps
     filename = join(expanduser('~'), tar, args.filename)
@@ -562,8 +564,9 @@ def main():
     else:
         resample = resample_interp
 
-    check_compatibility(src, steps, tasks)
-    steps = get_steps(steps)
+    check_compatibility(r_src, steps, tasks)
+    check_compatibility(v_src, steps, tasks)
+    steps = get_steps(steps) # in vid time
     
     ensure_dir(filename)
 
@@ -577,21 +580,25 @@ def main():
                 demos_cnt[pid][task] = 0
 
     task_filters = load_tasks(filters)
-    bag_files = sort_by_timestamp(get_files_recursive(src, dirs_get=tasks, type='bag'))
-    n = len(bag_files)
+    r_bag_files = sort_by_timestamp(get_files_recursive(r_src, dirs_get=tasks, type='bag')
+    v_bag_files = sort_by_timestamp(get_files_recursive(v_src, dirs_get=tasks, type='bag')
+    n = len(r_bag_files)
 
     dataset = {}
-    for i, bag_file in enumerate(bag_files):
-        print 'Processing ' + bag_file + ' (' + str(i+1) + '/' + str(n) + ')...'
+    for i, bag_files in enumerate(zip(r_bag_files, v_bag_files)):
+        r_bag_file, v_bag_file = bag_files
+        print 'Processing ' + r_bag_file + ' (' + str(i+1) + '/' + str(n) + ')...'
 
-        pid = get_task_name(bag_file)
-        task = get_skill_name(bag_file)
+        pid = get_task_name(r_bag_file)
+        task = get_skill_name(r_bag_file)
 
         demo_idx = demos_cnt[pid][task]
         demo_num = steps[pid][task].keys()[demo_idx]
-        demo_id = 'd'+str(demo_num)+'_'+get_timestamp(bag_file)
+        demo_id = 'd'+str(demo_num)+'_'+get_timestamp(r_bag_file)
 
-        add_demo(bag_file, dataset, pid, task, demo_id, task_filters[task], steps[pid][task][demo_num])
+        steps_adj = adjust_kf_to_ref(r_bag_file, v_bag_file, steps[pid][task][demo_num]) # in robot time
+
+        add_demo(r_bag_file, dataset, pid, task, demo_id, task_filters[task], steps_adj)
 
         demos_cnt[pid][task] += 1
 

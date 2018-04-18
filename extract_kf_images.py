@@ -159,18 +159,20 @@ def main():
 
     n = len(r_bag_files)
 
-    for i, bag_file in enumerate(r_bag_files):
-        print 'Processing ' + bag_file + ' (' + str(i+1) + '/' + str(n) + ')...'
+    for i, bag_files in enumerate(zip(r_bag_files, v_bag_files)):
+        r_bag_file, v_bag_file = bag_files
+        print 'Processing ' + r_bag_file + ' (' + str(i+1) + '/' + str(n) + ')...'
 
-        pid = get_task_name(bag_file)
-        task = get_skill_name(bag_file)
+        pid = get_task_name(r_bag_file)
+        task = get_skill_name(r_bag_file)
         demo_idx = demos_cnt[pid][task]
-        demo_id = 'd'+str(demos[pid][task][demo_idx])+'_'+get_timestamp(bag_file)
+        demo_id = 'd'+str(demos[pid][task][demo_idx])+'_'+get_timestamp(r_bag_file)
 
-        r_imgs, t = get_keyframe_images(bag_file)
+        r_imgs, kf = get_keyframe_images(r_bag_file) # in robot time
+        kf = adjust_kf_to_ref(v_bag_file, r_bag_file, kf) # in vid time
         
-        v_imgs, v_t = get_images(v_bag_files[i], compressed=False, img_topic='/usb_cam/image_raw')
-        v_imgs = get_x_at_t(v_imgs, v_t, t)
+        v_imgs, v_t = get_images(v_bag_file, compressed=False, img_topic='/usb_cam/image_raw')
+        v_imgs = get_x_at_t(v_imgs, v_t, kf)
 
         for j, imgs in enumerate(zip(r_imgs, v_imgs)):
             r_img, v_img = imgs
