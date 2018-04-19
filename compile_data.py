@@ -580,8 +580,8 @@ def main():
                 demos_cnt[pid][task] = 0
 
     task_filters = load_tasks(filters)
-    r_bag_files = sort_by_timestamp(get_files_recursive(r_src, dirs_get=tasks, type='bag')
-    v_bag_files = sort_by_timestamp(get_files_recursive(v_src, dirs_get=tasks, type='bag')
+    r_bag_files = sort_by_timestamp(get_files_recursive(r_src, dirs_get=tasks, type='bag'))
+    v_bag_files = sort_by_timestamp(get_files_recursive(v_src, dirs_get=tasks, type='bag'))
     n = len(r_bag_files)
 
     dataset = {}
