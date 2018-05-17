@@ -24,12 +24,16 @@ def main():
                 fig, ax = plt.subplots(len(state_spaces), 1, sharex=True)
                 fig.suptitle(pid+'_'+task+'_'+demo_num.split('_')[0])
                 for i, state_space in enumerate(state_spaces):
-                    x = demo[state_space]
+                    x = demo[state_space] / (np.max(demo[state_space], axis=0) - np.min(demo[state_space], axis=0))
                     n = demo[state_space+'_names']
-                    ax[i].plot(t, x)
-                    ax[i].legend(n)
-                    ax[i].set_title(state_space)
-                ax[-1].set_xlabel('Time (s)')
+                    ax.plot(t, x)
+                    ax.legend(n)
+                    ax.set_title(state_space)
+                    #ax[i].plot(t, x)
+                    #ax[i].legend(n)
+                    #ax[i].set_title(state_space)
+                ax.set_xlabel('Time (s)')
+                #ax[-1].set_xlabel('Time (s)')
     plt.show()
                     
 if __name__ == '__main__':

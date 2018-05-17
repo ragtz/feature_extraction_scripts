@@ -93,7 +93,7 @@ def main():
         ax[r,c].plot([0,1], [0,1], color='navy', lw=2, linestyle='--')
         ax[r,c].set_xlim([0,1])
         ax[r,c].set_ylim([0,1.05])
-        ax[r,c].set_title(feature_names[task][i])
+        #ax[r,c].set_title(feature_names[task][i])
         ax[r,c].legend(loc='upper left')
     plt.show()
 

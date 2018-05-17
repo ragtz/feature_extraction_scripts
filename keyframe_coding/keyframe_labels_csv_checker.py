@@ -37,7 +37,9 @@ class ErrorTypes:
     _required_kfs = {'drawer': ['b', 'c', 'd', 'e', 'g'],
                      'lamp': ['b', 'c', 'd', 'f', 'h'],
                      'pitcher': ['b', 'c', 'f', 'g', 'j', 'k', 'm', 'n', 'o', 'p', 'r'],
+                     #'pitcher': ['b', 'c', 'g', 'j', 'k', 'm', 'n', 'p', 'r'],
                      'bowl': ['b', 'c', 'e', 'f', 'g', 'h', 'i', 'j', 'l']}
+                     #'bowl': ['b', 'c', 'e', 'f', 'g', 'h', 'j', 'l']}
 
     def _is_complete(self, label_seq):
         return not '' in label_seq

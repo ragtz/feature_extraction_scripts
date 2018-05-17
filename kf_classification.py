@@ -97,7 +97,7 @@ def main():
         train_X = scaler.transform(train_X)
         test_X = scaler.transform(test_X)
 
-        #weights = compute_sample_weight('balanced', train_y)
+        weights = compute_sample_weight('balanced', train_y)
 
         clf.fit(train_X, train_y, sample_weight=weights)
 

@@ -504,7 +504,7 @@ def get_keyframe_times(bag_file, add_gripper_kfs=True):
         kf.extend(list(gripper_kfs))
         kf = np.sort(kf)
 
-        ''' 
+        '''
         plt.plot(gripper_t, gripper_state)
         plt.plot(gripper_t[:-1], d_gripper_state)
         plt.plot(gripper_t[:-1], np.abs(d_gripper_state))
