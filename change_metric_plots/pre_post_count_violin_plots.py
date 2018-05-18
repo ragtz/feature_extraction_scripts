@@ -1,0 +1,290 @@
+#!/usr/bin/env python
+
+from copy import deepcopy
+import matplotlib.pyplot as plt
+import numpy as np
+import argparse
+import pickle
+
+def get_pid_num(pid):
+    try:
+        return int(pid)
+    except:
+        return int(pid[1:])
+
+def get_did_num(did):
+    try:
+        return int(did)
+    except:
+        return int(did.split('_')[0][1:])
+
+def sort_keys(keys, f):
+    return [f(k) for k in np.array(keys)[np.argsort([f(k) for k in keys])]]
+
+def sort_pids(pids):
+    return sort_keys(pids, get_pid_num)
+
+def sort_dids(dids):
+    return sort_keys(dids, get_did_num)
+
+def handle_pids(data, pids):
+    if not pids:
+        pids = list(set(data.keys()))
+    return pids
+
+def handle_tasks(data, pids, tasks):
+    if not tasks:
+        tasks = set([])
+        for pid in pids:
+            tasks = tasks.union(data[pid].keys())
+        tasks = list(tasks)
+    return tasks    
+
+def check_compatability(data, labels):
+    d1, d2 = data, labels
+
+    # check that pids match
+    d1_pids = sort_pids(d1.keys())
+    d2_pids = sort_pids(d2.keys())
+
+    if d1_pids != d2_pids:
+        raise Exception('PIDs differ between data sources')
+
+    # check that tasks per pid match
+    for pid in d1:
+        d1_tasks = sorted(d1[pid].keys())
+        d2_tasks = sorted(d2[pid].keys())
+
+        if d1_tasks != d2_tasks:
+            raise Exception('Tasks differ between data sources for pid ' + pid)
+
+    # check that demos per pid/task match
+    for pid in d1:
+        for task in d1[pid]:
+            d1_demos = sort_dids(d1[pid][task].keys())
+            d2_demos = sort_dids(d2[pid][task].keys())
+
+            if d1_demos != d2_demos:
+                raise Exception('Demos differ between data sources for pid ' + pid + ' and task ' + task)
+
+    # check that num keyframes per pid/task/demo match
+    for pid in d1:
+        for task in d1[pid]:
+            for demo in d1[pid][task]:
+                d1_n = len(d1[pid][task][demo]['kf'])
+                d2_n = len(d2[pid][task][str(get_did_num(demo))])
+
+                if d1_n != d2_n:
+                    raise Exception('Number of keyframes differ between data sources for pid ' + pid + ', task ' + task + ', and demo ' + demo)
+
+def data_subset(data, pids, tasks):
+    pids = handle_pids(data, pids)
+    tasks = handle_tasks(data, pids, tasks)
+
+    d = {}
+
+    for pid in data:
+        if pid in pids:
+            for task in data[pid]:
+                if task in tasks:
+                    for demo in data[pid][task]:
+                        if not pid in d:
+                            d[pid] = {}
+
+                        if not task in d[pid]:
+                            d[pid][task] = {}
+
+                        d[pid][task][demo] = deepcopy(data[pid][task][demo])
+
+    return d 
+
+def get_segment(d, t, t_start, t_end):
+    idx_start = np.argmin(np.abs(t - t_start))
+    idx_end = np.argmin(np.abs(t - t_end))
+    return d[idx_start:idx_end]
+
+def compute_statistics(traj):
+    return {'mean': np.mean(traj, axis=0),
+            'median': np.median(traj, axis=0),
+            'variance': np.var(traj, axis=0)}
+
+def compute_counts(pre, post, n=1):
+    mean = np.mean(pre, axis=0)
+    std = np.std(pre, axis=0)
+
+    counts = np.abs(post) > mean + n*std
+    counts = np.sum(counts, axis=0)
+    return counts
+
+def compile_statistics(demo, labels, delta_t, stats):
+    t = demo['t']
+    keyframes = demo['kf']
+    state = demo['state']
+    state_names = demo['state_names']
+
+    for name in state_names:
+        if not name in stats:
+            stats[name] = [{'pre': {}, 'post': {}, 'joint': {}},
+                           {'pre': {}, 'post': {}, 'joint': {}}]
+
+    for i, kf in enumerate(keyframes[1:-1]):
+        i += 1
+
+        pre = get_segment(state, t, kf-delta_t, kf)
+        post = get_segment(state, t, kf, kf+delta_t)
+
+        if len(pre) > 4 and len(post) > 4:
+            pre_stats = compute_statistics(pre)
+            post_stats = compute_statistics(post)
+            joint_stats = compute_statistics(np.concatenate((pre, post)))
+
+            for j, name in enumerate(state_names):
+                pre = stats[name][labels[i]]['pre']
+                post = stats[name][labels[i]]['post']
+                joint = stats[name][labels[i]]['joint']
+
+                for k in pre_stats:
+                    if not k in pre:
+                        pre[k] = []
+
+                    pre[k].append(pre_stats[k][j])
+                
+                for k in post_stats:
+                    if not k in post:
+                        post[k] = []
+
+                    post[k].append(post_stats[k][j])
+
+                for k in joint_stats:
+                    if not k in joint:
+                        joint[k] = []
+
+                    joint[k].append(joint_stats[k][j])
+
+def compile_counts(demo, labels, delta_t, counts):
+    t = demo['t']
+    keyframes = demo['kf']
+    state = demo['state']
+    state_names = demo['state_names']
+
+    for name in state_names:
+        if not name in counts:
+            counts[name] = [[],[]]
+
+    for i, kf in enumerate(keyframes[1:-1]):
+        i += 1
+
+        pre = get_segment(state, t, kf-delta_t, kf)
+        post = get_segment(state, t, kf, kf+delta_t)
+
+        if len(pre) > 4 and len(post) > 4:
+            cs = compute_counts(pre, post)
+
+            for j, c in enumerate(cs):
+                counts[state_names[j]][labels[i]].append(c) 
+            
+def plot_statistics(stats, fname, stat='median', n_cols=4):
+    n = len(stats)
+    n_rows = n/n_cols + (n%n_cols > 0)
+
+    fig, ax = plt.subplots(n_rows, n_cols, sharex=True)#, sharey=True)
+    for idx, name in enumerate(sorted(stats.keys())):
+        pos = [0, 1, 2, 4, 5, 6]
+        labels = ['ns-pre', 'ns-post', 'ns-joint', 's-pre', 's-post', 's-joint']
+
+        ns_pre = stats[name][0]['pre'][stat]
+        ns_post = stats[name][0]['post'][stat]
+        ns_joint = stats[name][0]['joint'][stat]
+
+        s_pre = stats[name][1]['pre'][stat]
+        s_post = stats[name][1]['post'][stat]
+        s_joint = stats[name][1]['joint'][stat]
+
+        data = [ns_pre, ns_post, ns_joint, s_pre, s_post, s_joint]
+
+        i, j = idx/n_cols, idx%n_cols
+
+        ax[i,j].set_title(name)
+        ax[i,j].violinplot(data, pos, showmeans=True, showextrema=True, showmedians=True)
+        ax[i,j].set_xticks(pos)
+        ax[i,j].set_xticklabels(labels)
+        
+        if i == n_rows-1:
+            ax[i,j].set_xlabel('Label')
+        
+        if j == 0:
+            ax[i,j].set_ylabel(stat)
+
+    if fname:
+        plt.savefig(fname, bbox_inches='tight')
+    else:
+        plt.show()
+
+def plot_counts(counts, fname, task, n_cols=4):
+    n = len(counts)
+    n_rows = n/n_cols + (n%n_cols > 0)
+
+    fig, ax = plt.subplots(n_rows, n_cols, sharex=True)#, sharey=True)
+    fig.suptitle(task)
+    for idx, name in enumerate(sorted(counts.keys())):
+        pos = [0, 1]
+        labels = ['non-seg', 'seg']
+
+        data_0 = counts[name][0]
+        data_1 = counts[name][1]
+        data = [data_0, data_1]
+
+        i, j = idx/n_cols, idx%n_cols
+
+        ax[i,j].set_title(name)
+        ax[i,j].violinplot(data, pos, showmeans=True, showextrema=True, showmedians=True)
+        ax[i,j].set_xticks(pos)
+        ax[i,j].set_xticklabels(labels)
+        
+        if i == n_rows-1:
+            ax[i,j].set_xlabel('Label')
+        
+        if j == 0:
+            ax[i,j].set_ylabel('Counts')
+
+    if fname:
+        plt.savefig(fname, bbox_inches='tight')
+    else:
+        plt.show()
+     
+def main():
+    parser = argparse.ArgumentParser(description='Segment keyframe demonstrations')
+    parser.add_argument('--data', metavar='PKL', required=True, help='Dataset pkl file')
+    parser.add_argument('--labels', metavar='PKL', required=True, help='Keyframe labels pkl file')
+    parser.add_argument('--delta_t', metavar='SEC', type = float, required=True, help='Time window before and after keyframe') 
+    parser.add_argument('--pids', metavar='PID', nargs='+', default=[], required=False, help='Pids from dataset to process')
+    parser.add_argument('--tasks', metavar='TASK', nargs='+', default=[], required=False, help='Tasks from dataset to process')
+    parser.add_argument('--fname', metavar='STR', required=False, help='Name of saved figure')
+
+    args = parser.parse_args()
+    data = pickle.load(open(args.data))
+    labels = pickle.load(open(args.labels))
+    delta_t = args.delta_t
+    pids = args.pids
+    tasks = args.tasks
+    fname = args.fname
+
+    data = data_subset(data, pids, tasks)
+    labels = data_subset(labels, pids, tasks)
+
+    check_compatability(data, labels)
+
+    counts = {}
+    for pid in data:
+        for task in data[pid]:
+            for demo in data[pid][task]:
+                compile_counts(data[pid][task][demo], 
+                               labels[pid][task][str(get_did_num(demo))],
+                               delta_t,
+                               counts)
+
+    plot_counts(counts, fname, tasks[0])
+ 
+if __name__ == '__main__':
+    main()
+
