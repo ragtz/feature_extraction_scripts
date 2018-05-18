@@ -123,3 +123,13 @@ class KeyframeDataset(object):
 
             yield (pid_train_subset, self._get_feature_label(pid=pid_train_subset)), (pid_test_subset, self._get_feature_label(pid=pid_test_subset))
 
+    def task_iter_train_test(self, m):
+        self._check_nonempty()
+        self._check_subset_size(self.tasks, m)
+
+        for task_train_subset in self._iter_subsets(self.tasks, m):
+            task_train_subset = list(task_train_subset)
+            task_test_subset = list(set(self.tasks) - set(task_train_subset))
+
+            yield (task_train_subset, self._get_feature_label(task=task_train_subset)), (task_test_subset, self._get_feature_label(task=task_test_subset))
+
