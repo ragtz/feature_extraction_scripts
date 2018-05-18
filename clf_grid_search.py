@@ -86,12 +86,14 @@ def main():
     parser.add_argument('--data', metavar='PKL', required=True, help='Keyframe dataset file')
     parser.add_argument('--task', metavar='TSK', nargs='+', default=[], required=False, help='Task to train classifier')
     parser.add_argument('--clf', metavar='CLF', choices=['svc', 'rfc'], default='svc', required=False, help='Type of classifier')
+    parser.add_argument('--split', metavar='SLT', choices=['user', 'task'], default='user', required=False, help='Type of train/test split')
     parser.add_argument('--output', metavar='CSV', required=True, help='Csv file to save results')
 
     args = parser.parse_args()
     data_file = args.data
     task = args.task
     clf_type = args.clf
+    split = args.split
     csv_file = args.output
 
     dataset = KeyframeDataset()
@@ -120,7 +122,9 @@ def main():
         false_pos = 0.
         false_neg = 0.
 
-        for i, train_test in enumerate(dataset.task_iter_train_test(len(task)-1)):#enumerate(dataset.iter_train_test(num_pids-1)):
+        train_test_iter = dataset.iter_train_test(num_pids-1) if split == 'user' else dataset.task_iter_train_test(len(task)-1)
+
+        for i, train_test in enumerate(train_test_iter):
             train, test = train_test
 
             train_pid, train = train
