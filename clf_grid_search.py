@@ -11,15 +11,6 @@ import numpy as np
 import argparse
 import csv
 
-'''
-{'kernel': ['poly'],
-'C': np.arange(1,11,.5),
-'degree': [2, 3, 4],
-'gamma': ['auto', .0001, .001, .01, .1, 1, 10, 100],
-'coef0': [0, .1, 1, 10, -.1, -1, 10],
-'class_weight': [None, 'balanced']},
-'''
-
 clf_params = {'svc': [{'kernel': ['linear'],
                        'C': np.arange(1,11,.5),
                        'class_weight': [None, 'balanced']},
@@ -27,19 +18,74 @@ clf_params = {'svc': [{'kernel': ['linear'],
                       {'kernel': ['rbf'],
                        'C': np.arange(1,11,.5),
                        'gamma': ['auto', .0001, .001, .01, .1, 1, 10, 100],
+                       'class_weight': [None, 'balanced']},
+
+                      {'kernel': ['poly'],
+                       'C': np.arange(1,11,.5),
+                       'degree': [2, 3, 4],
+                       'gamma': ['auto', .0001, .001, .01, .1, 1, 10, 100],
+                       'coef0': [0, .1, 1, 10, -.1, -1, 10],
                        'class_weight': [None, 'balanced']}],
 
-              'dtc': [{},
-                      {}],
+              'rfc': [{'n_estimators': np.arange(10,110,10),
+                       'criterion': ['gini', 'entropy'],
+                       'max_depth': [2, 3, 4, 5, 10, 20, 50, 100, None],
+                       'max_features': ['sqrt', 'log2', None],
+                       'class_weight': [None, 'balanced']}]}
 
-              'rfc': [{},
-                      {}]}
+clf_fieldnames = {'svc': ['kernel', 'C', 'gamma', 'class_weight', 'degree', 'coef0',
+                          'train_acc', 'test_acc', 'true_pos', 'true_neg', 'false_pos',
+                          'false_neg', 'precision', 'recall'],
+
+                  'rfc': ['n_estimators', 'criterion', 'max_depth', 'min_samples_split',
+                          'min_samples_leaf', 'min_weight_fraction_leaf', 'max_features',
+                          'max_leaf_nodes', 'min_impurity_descrease', 'min_impurity_split',
+                          'bootstrap', 'oob_score', 'class_weight']}
+
+def svc_params_row(params):
+    row = {'kernel': params['kernel'],
+           'C': params['C']}
+
+    if 'gamma' in params:
+        row['gamma'] = params['gamma']
+    else:
+        row['gamma'] = '-'
+
+    if not params['class_weight'] is None:
+        row['class_weight'] = params['class_weight']
+    else:
+        row['class_weight'] = 'none'
+
+    if 'degree' in params:
+        row['degree'] = params['degree']
+    else:
+        row['degree'] = '-'
+
+    if 'coef0' in params:
+        row['coef0'] = params['coef0']
+    else:
+        row['coef0'] = '-'
+
+    return row
+
+def rfc_params_row(params):
+    row = {k: params[k] for k in ['n_estimators', 'criterion']}
+
+    for k in ['max_features', 'max_depth', 'class_weight']:
+        if not params[k] is None:
+            row[k] = params[k]
+        else:
+            row[k] = 'none'
+
+    return row
+
+params_row = {'svc': svc_params_row, 'rfc': rfc_params_row}
 
 def main():
     parser = argparse.ArgumentParser(description='Grid search over classifier parameters')
     parser.add_argument('--data', metavar='PKL', required=True, help='Keyframe dataset file')
-    parser.add_argument('--task', metavar='TSK', choices=['drawer', 'lamp', 'pitcher', 'bowl', 'all'], default='all', required=False, help='Task to train classifier')
-    parser.add_argument('--clf', metavar='CLF', choices=['svc', 'dtc', 'rfc'], deafult='svc', required=False, help='Type of classifier')
+    parser.add_argument('--task', metavar='TSK', nargs='+', default=[], required=False, help='Task to train classifier')
+    parser.add_argument('--clf', metavar='CLF', choices=['svc', 'rfc'], default='svc', required=False, help='Type of classifier')
     parser.add_argument('--output', metavar='CSV', required=True, help='Csv file to save results')
 
     args = parser.parse_args()
@@ -53,11 +99,16 @@ def main():
     dataset = dataset.get_keyframe_dataset(task=task)
     num_pids = dataset.get_num_pids()
 
+    fieldnames = clf_fieldnames[clf_type] + ['train_acc', 'test_acc', 'true_pos', 'true_neg', 'false_pos', 'false_neg', 'precision', 'recall']
+
+    max_test_acc = -float('inf')
+    n = len(ParameterGrid(clf_params[clf_type]))
     for run, params in enumerate(ParameterGrid(clf_params[clf_type])):
+        print '----------------------------------------'
+        print 'Training and testing classifier ' + str(run+1) + ' of ' + str(n) + '...'
+
         if clf_type == 'svc':
             clf = SVC(**params)
-        elif clf_type == 'dtc':
-            clf = DTC(**params)
         else:
             clf = RFC(**params)
 
@@ -69,7 +120,7 @@ def main():
         false_pos = 0.
         false_neg = 0.
 
-        for i, train_test in enumerate(dataset.iter_train_test(num_pids-1)):
+        for i, train_test in enumerate(dataset.task_iter_train_test(len(task)-1)):#enumerate(dataset.iter_train_test(num_pids-1)):
             train, test = train_test
 
             train_pid, train = train
@@ -77,8 +128,6 @@ def main():
 
             test_pid, test = test
             test_X, test_y = test
-
-            pid_rm.extend(test_pid)
 
             scaler = StandardScaler()
             scaler.fit(train_X)
@@ -104,56 +153,47 @@ def main():
             false_pos += np.sum(pred_labels[neg_idxs] == 1)
             false_neg += np.sum(pred_labels[pos_idxs] == 0)
 
+        train_mean = np.mean(train_accs)
+        test_mean = np.mean(test_accs)
+        precision = true_pos/(true_pos + false_pos) if true_pos + false_pos > 0 else 'inf'
+        recall = true_pos/(true_pos + false_neg) if true_pos + false_neg > 0 else 'inf'
+        true_pos = int(true_pos)
+        true_neg = int(true_neg)
+        false_pos = int(false_pos)
+        false_neg = int(false_neg)
+
+        row = params_row[clf_type](params)
+        row['train_acc'] = train_mean
+        row['test_acc'] = test_mean
+        row['true_pos'] = true_pos
+        row['true_neg'] = true_neg
+        row['false_pos'] = false_pos
+        row['false_neg'] = false_neg
+        row['precision'] = precision
+        row['recall'] = recall
+ 
         if run == 0:
             with open(csv_file, 'w') as csvfile:
-                fieldnames = ['kernel', 'C', 'gamma', 'class_weight',
-                              'train_acc', 'test_acc', 'true_pos',
-                              'true_neg', 'false_pos', 'false_neg',
-                              'precision', 'recall']
-
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-                row = {'kernel': params['kernel'],
-                       'C': params['C'],
-                       'class_weight': params['class_weight']}
-                if 'gamma' in params:
-                    row['gamma'] = params['gamma']
-                else:
-                    row['gamma'] = '-'
-
-                row['train_acc'] = np.mean(train_accs)
-                row['test_acc'] = np.mean(test_accs)
-                row['true_pos'] = int(true_pos)
-                row['true_neg'] = int(true_neg)
-                row['false_pos'] = int(false_pos)
-                row['false_neg'] = int(false_neg)
-                row['precision'] = true_pos/(true_pos + false_pos)
-                row['recall'] = true_pos/(true_pos + false_neg)
-
                 writer.writeheader()
                 writer.writerow(row) 
         else:
             with open(csv_file, 'a') as csvfile:
-                writer = csv.DictWriter(csvfile)
-
-                row = {'kernel': params['kernel'],
-                       'C': params['C'],
-                       'class_weight': params['class_weight']}
-                if 'gamma' in params:
-                    row['gamma'] = params['gamma']
-                else:
-                    row['gamma'] = '-'
-
-                row['train_acc'] = np.mean(train_accs)
-                row['test_acc'] = np.mean(test_accs)
-                row['true_pos'] = int(true_pos)
-                row['true_neg'] = int(true_neg)
-                row['false_pos'] = int(false_pos)
-                row['false_neg'] = int(false_neg)
-                row['precision'] = true_pos/(true_pos + false_pos)
-                row['recall'] = true_pos/(true_pos + false_neg)
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writerow(row) 
 
+        max_test_acc = max([max_test_acc, test_mean])
+
+        print 'Train Acc Mean:', train_mean
+        print 'Test Acc Mean:', test_mean
+        print 'Precision:', precision
+        print 'Recall:', recall
+        print '----------------------------------------'
+
+    print '========================================'
+    print 'Best Test Acc:', max_test_acc
+    print '========================================'
+ 
 if __name__ == '__main__':
     main()
 
