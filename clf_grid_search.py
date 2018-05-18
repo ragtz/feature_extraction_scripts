@@ -1,53 +1,66 @@
 #!/usr/bin/env python
 
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import ParameterGrid
 from sklearn.utils.class_weight import compute_sample_weight
-from sklearn.tree import DecisionTreeClassifier, export_graphviz
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier as DTC
+from sklearn.ensemble import RandomForestClassifier as RFC
 from sklearn.svm import SVC
 from keyframe_dataset import *
 import numpy as np
-import itertools
 import argparse
 import csv
 
-clfs = {'svc': SVC(),
-        'dtc': DecisionTreeClassifier(),
-        'rfc': RandomForestClassifier()}
+'''
+{'kernel': ['poly'],
+'C': np.arange(1,11,.5),
+'degree': [2, 3, 4],
+'gamma': ['auto', .0001, .001, .01, .1, 1, 10, 100],
+'coef0': [0, .1, 1, 10, -.1, -1, 10],
+'class_weight': [None, 'balanced']},
+'''
 
-clf_params = {'svc': {'kernel': ['linear', 'rbf', 'poly'],
-                      'C': [],
-                      'degree': [],
-                      'gamma': [],
-                      'coef0': [],
-                      'class_weight': [None, 'balanced']}}
+clf_params = {'svc': [{'kernel': ['linear'],
+                       'C': np.arange(1,11,.5),
+                       'class_weight': [None, 'balanced']},
 
-def grid_enumerate(params):
-    for p in itertools.product(*[params[k] for k in params])
-        yield {k: p[i] for i, k in enumerate(params)}
+                      {'kernel': ['rbf'],
+                       'C': np.arange(1,11,.5),
+                       'gamma': ['auto', .0001, .001, .01, .1, 1, 10, 100],
+                       'class_weight': [None, 'balanced']}],
+
+              'dtc': [{},
+                      {}],
+
+              'rfc': [{},
+                      {}]}
 
 def main():
     parser = argparse.ArgumentParser(description='Grid search over classifier parameters')
     parser.add_argument('--data', metavar='PKL', required=True, help='Keyframe dataset file')
     parser.add_argument('--task', metavar='TSK', choices=['drawer', 'lamp', 'pitcher', 'bowl', 'all'], default='all', required=False, help='Task to train classifier')
-    parser.add_argument('--clf', metavar='CLF', choices=['svc'], deafult='svc', required=False, help='Type of classifier')
+    parser.add_argument('--clf', metavar='CLF', choices=['svc', 'dtc', 'rfc'], deafult='svc', required=False, help='Type of classifier')
     parser.add_argument('--output', metavar='CSV', required=True, help='Csv file to save results')
 
     args = parser.parse_args()
     data_file = args.data
     task = args.task
+    clf_type = args.clf
     csv_file = args.output
-
-    clf = clfs[args.clf]
-    params = clf_params[args.clf]
 
     dataset = KeyframeDataset()
     dataset.load(data_file)
     dataset = dataset.get_keyframe_dataset(task=task)
     num_pids = dataset.get_num_pids()
 
-    for p in grid_enumerate(params):
-        pid_rm = []
+    for run, params in enumerate(ParameterGrid(clf_params[clf_type])):
+        if clf_type == 'svc':
+            clf = SVC(**params)
+        elif clf_type == 'dtc':
+            clf = DTC(**params)
+        else:
+            clf = RFC(**params)
+
         train_accs = []
         test_accs = []
 
@@ -91,17 +104,55 @@ def main():
             false_pos += np.sum(pred_labels[neg_idxs] == 1)
             false_neg += np.sum(pred_labels[pos_idxs] == 0)
 
-        print 'PID RM:', pid_rm
-        print 'Train Accs:', train_accs
-        print 'Test Accs:', test_accs
-        print 'Train Acc Avg:', np.mean(train_accs)
-        print 'Test Acc Avg:', np.mean(test_accs)
-        print 'TP:', int(true_pos)
-        print 'TN:', int(true_neg)
-        print 'FP:', int(false_pos)
-        print 'FN:', int(false_neg)
-        print 'Precision:', true_pos/(true_pos + false_pos)
-        print 'Recall:', true_pos/(true_pos + false_neg)
+        if run == 0:
+            with open(csv_file, 'w') as csvfile:
+                fieldnames = ['kernel', 'C', 'gamma', 'class_weight',
+                              'train_acc', 'test_acc', 'true_pos',
+                              'true_neg', 'false_pos', 'false_neg',
+                              'precision', 'recall']
+
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+                row = {'kernel': params['kernel'],
+                       'C': params['C'],
+                       'class_weight': params['class_weight']}
+                if 'gamma' in params:
+                    row['gamma'] = params['gamma']
+                else:
+                    row['gamma'] = '-'
+
+                row['train_acc'] = np.mean(train_accs)
+                row['test_acc'] = np.mean(test_accs)
+                row['true_pos'] = int(true_pos)
+                row['true_neg'] = int(true_neg)
+                row['false_pos'] = int(false_pos)
+                row['false_neg'] = int(false_neg)
+                row['precision'] = true_pos/(true_pos + false_pos)
+                row['recall'] = true_pos/(true_pos + false_neg)
+
+                writer.writeheader()
+                writer.writerow(row) 
+        else:
+            with open(csv_file, 'a') as csvfile:
+                writer = csv.DictWriter(csvfile)
+
+                row = {'kernel': params['kernel'],
+                       'C': params['C'],
+                       'class_weight': params['class_weight']}
+                if 'gamma' in params:
+                    row['gamma'] = params['gamma']
+                else:
+                    row['gamma'] = '-'
+
+                row['train_acc'] = np.mean(train_accs)
+                row['test_acc'] = np.mean(test_accs)
+                row['true_pos'] = int(true_pos)
+                row['true_neg'] = int(true_neg)
+                row['false_pos'] = int(false_pos)
+                row['false_neg'] = int(false_neg)
+                row['precision'] = true_pos/(true_pos + false_pos)
+                row['recall'] = true_pos/(true_pos + false_neg)
+                writer.writerow(row) 
 
 if __name__ == '__main__':
     main()
