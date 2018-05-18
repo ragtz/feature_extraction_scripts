@@ -66,7 +66,8 @@ def get_avg_obj_obj_dist(demo):
     if dists.shape[1] > 0:
         return (['avg_obj_obj_dist'], np.mean(dists, axis=1)[:,np.newaxis])
     else:
-        return ([], np.array([]))
+        #return ([], np.array([]))
+        return (['avg_obj_obj_dist'], np.zeros((len(demo['t']),1)))
 
 def get_avg_table_obj_dist(demo):
     dists = get_dists(demo, objs, ref=table)
