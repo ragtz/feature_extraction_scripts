@@ -33,7 +33,8 @@ def check_compatibility(bag_dir, steps_file, tasks=[]):
         for row in reader:
             pid = 'p'+'{:0>2d}'.format(int(row['PID']))
             task = row['Task']
-            increment_demos(csv_demos, pid, task)
+            if task in tasks:
+                increment_demos(csv_demos, pid, task)
 
     # iterate through bag and csv num demos, throw exception if inconsistent
     # check that pids match
