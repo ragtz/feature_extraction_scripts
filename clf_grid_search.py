@@ -6,9 +6,11 @@ from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.tree import DecisionTreeClassifier as DTC
 from sklearn.ensemble import RandomForestClassifier as RFC
 from sklearn.svm import SVC
+from copy import deepcopy
 from keyframe_dataset import *
 import numpy as np
 import argparse
+import pickle
 import csv
 
 clf_params = {'svc': [{'kernel': ['linear'],
@@ -87,14 +89,16 @@ def main():
     parser.add_argument('--task', metavar='TSK', nargs='+', default=[], required=False, help='Task to train classifier')
     parser.add_argument('--clf', metavar='CLF', choices=['svc', 'rfc'], default='svc', required=False, help='Type of classifier')
     parser.add_argument('--split', metavar='SLT', choices=['user', 'task'], default='user', required=False, help='Type of train/test split')
-    parser.add_argument('--output', metavar='CSV', required=True, help='Csv file to save results')
+    parser.add_argument('--results', metavar='CSV', required=True, help='Csv file to save results')
+    parser.add_argument('--models', metavar='PKL', required=True, help='Pkl file to save best models')
 
     args = parser.parse_args()
     data_file = args.data
     task = args.task
     clf_type = args.clf
     split = args.split
-    csv_file = args.output
+    csv_file = args.results
+    model_file = args.models
 
     dataset = KeyframeDataset()
     dataset.load(data_file)
@@ -103,6 +107,7 @@ def main():
 
     fieldnames = clf_fieldnames[clf_type] + ['train_acc', 'test_acc', 'true_pos', 'true_neg', 'false_pos', 'false_neg', 'precision', 'recall']
 
+    best_models = {}
     max_test_acc = -float('inf')
     n = len(ParameterGrid(clf_params[clf_type]))
     for run, params in enumerate(ParameterGrid(clf_params[clf_type])):
@@ -121,6 +126,8 @@ def main():
         true_neg = 0.
         false_pos = 0.
         false_neg = 0.
+
+        curr_models = {}
 
         train_test_iter = dataset.iter_train_test(num_pids-1) if split == 'user' else dataset.task_iter_train_test(len(task)-1)
 
@@ -143,19 +150,24 @@ def main():
 
             clf.fit(train_X, train_y, sample_weight=weights)
 
-            train_accs.append(clf.score(train_X, train_y))
-            test_accs.append(clf.score(test_X, test_y))
+            train_acc = clf.score(train_X, train_y)
+            test_acc = clf.score(test_X, test_y)
+
+            train_accs.append(train_acc)
+            test_accs.append(test_acc)
 
             pos_idxs = np.where(test_y == 1)[0]
             neg_idxs = np.where(test_y == 0)[0]
 
             pred_labels = clf.predict(test_X)
-     
+ 
             true_pos += np.sum(pred_labels[pos_idxs] == 1)
             true_neg += np.sum(pred_labels[neg_idxs] == 0)
 
             false_pos += np.sum(pred_labels[neg_idxs] == 1)
             false_neg += np.sum(pred_labels[pos_idxs] == 0)
+            
+            curr_models[test_pid[0]] = {'scaler': scaler, 'clf': clf, 'train_acc': train_acc, 'test_acc': test_acc}
 
         train_mean = np.mean(train_accs)
         test_mean = np.mean(test_accs)
@@ -185,6 +197,12 @@ def main():
             with open(csv_file, 'a') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writerow(row) 
+        
+        if test_mean > max_test_acc:
+            best_models = deepcopy(curr_models)
+            best_models['train_mean'] = train_mean
+            best_models['test_mean'] = test_mean
+            pickle.dump(best_models, open(model_file, 'w'))
 
         max_test_acc = max([max_test_acc, test_mean])
 
