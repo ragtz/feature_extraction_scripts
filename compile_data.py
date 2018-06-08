@@ -291,6 +291,13 @@ def merge_dictionaries(d1, d2):
         d_merged[k] = d1[k] + d2[k]
     return d_merged
 
+def clamp_features(x, t, min_t, max_t):
+    x.insert(0, x[0])
+    x.append(x[-1])
+
+    t.insert(0, min_t)
+    t.append(max_t)
+
 # Input: state time series of form {'name' : np.array([0,0,0],
 #                                                     [0,0,0]), ...}
 # Returns: feature names, feature vector time series of form np.array([0,0,0],
@@ -403,6 +410,16 @@ def extract_state_time_series(bag_file, object_filters):
                 ts['torque']['x'].append(torque)
                 ts['torque']['t'].append(t)                
 
+    # clamp object features forwards/backwards
+    min_t = min([ts[k]['t'][0] for k in ts])
+    max_t = max([ts[k]['t'][-1] for k in ts])
+    for name in object_filters:
+        clamp_features(ts[name]['x'], ts[name]['t'], min_t, max_t)
+        clamp_features(ts[name+'_hist']['x'], ts[name+'_hist']['t'], min_t, max_t)
+        clamp_features(ts[name+'_color']['x'], ts[name+'_color']['t'], min_t, max_t)
+        clamp_features(ts[name+'_volume']['x'], ts[name+'_volume']['t'], min_t, max_t)
+
+    # make numpy arrays
     make_np(ts['table'])
     make_np(ts['gripper_position'])
     make_np(ts['gripper_state'])
@@ -433,11 +450,22 @@ def extract_state_time_series(bag_file, object_filters):
 #        resampling rate
 # Returns: name of each feature element
 #          resampled and smoothed feature vector data
-def extract_feature_time_series(bag_file, object_filters, hz=10):
+def extract_feature_time_series(bag_file, object_filters, hz=50):
     ts = extract_state_time_series(bag_file, object_filters)
-    
+ 
     min_t = max([ts[k]['t'][0] for k in ts])
     max_t = min([ts[k]['t'][-1] for k in ts])
+
+    #print '------------------------------' 
+    #print 'min_t:', ts.keys()[np.argmax([ts[k]['t'][0] for k in ts])], min_t
+    #for k in ts:
+    #    print '      ', k, ts[k]['t'][0]
+    #print '------------------------------'
+
+    #print 'max_t:', ts.keys()[np.argmin([ts[k]['t'][-1] for k in ts])], max_t
+    #for k in ts:
+    #    print '      ', k, ts[k]['t'][-1]
+    #print '------------------------------'
 
     #print bag_file, min_t, max_t
     #print {k: ts[k]['t'][0] for k in ts}
@@ -545,7 +573,7 @@ def main():
     parser.add_argument('--steps', metavar='CSV', required=True, help='Name of csv steps file')
     parser.add_argument('--filename', metavar='PKL', required=True, help='Name of pkl dataset file')
     parser.add_argument('--filters', metavar='YAML', required=True, help='Path to yaml task filter parameter file')
-    parser.add_argument('--tasks', metavar='TASK', nargs='+', default=[], required=False, help='Task to compile')
+    parser.add_argument('--tasks', metavar='TASK', nargs='+', default=['drawer','lamp','pitcher','bowl'], required=False, help='Task to compile')
     parser.add_argument('--resample', metavar='RSMP', choices=['clamp', 'interp'], default='clamp', required=False, help='Resample type')
     
     args = parser.parse_args()
