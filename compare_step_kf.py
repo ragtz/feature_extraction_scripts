@@ -3,7 +3,9 @@
 from extract_kf_images import *
 from demo_file_utils import *
 from fetch_files import *
+from scipy.stats import trim_mean
 import numpy as np
+import itertools
 import argparse
 import pickle
 
@@ -53,6 +55,16 @@ def compute_step_kf_distance(x, t, steps, kf):
 
     return np.linalg.norm(np.array(step_fvs) - kf_fvs, axis=1)
 
+def compute_feature_range(x):
+    max_dist = -float('inf')
+
+    for x1, x2 in itertools.combinations(x,2):
+        dist = np.linalg.norm(x1 - x2)
+        if dist > max_dist:
+            max_dist = dist
+
+    return max_dist
+
 def compute_max_distance_from_steps(x, steps):
     steps = steps[1:-1]
     max_dists = []
@@ -93,8 +105,47 @@ def compute_object_volume_step_kf_distance(names, obj, x, t, steps, kf):
 
 def compute_step_kf_similarities(x, t, steps, kf):
     d = compute_step_kf_distance(x, t, steps, kf)
-    m = compute_max_distance_from_steps(x, steps)
+    #m = compute_max_distance_from_steps(x, steps)
+    m = compute_feature_range(x)
     return d/m
+
+def compute_feature_step_kf_similarities(names, f, x, t, steps, kf):
+    idxs = [i for i, name in enumerate(names) if f(name)]
+    return compute_step_kf_similarities(x[:,idxs], t, steps, kf)
+
+def compute_gripper_position_step_kf_similarities(names, x, t, steps, kf):
+    return compute_feature_step_kf_similarities(names, is_gripper_position_feature, x, t, steps, kf)
+
+def compute_gripper_state_step_kf_similarities(names, x, t, steps, kf):
+    return compute_feature_step_kf_similarities(names, is_gripper_state_feature, x, t, steps, kf)
+
+def compute_object_position_step_kf_similarities(names, obj, x, t, steps, kf):
+    def f(name):
+        return is_object_position_feature(name, obj)
+
+    return compute_feature_step_kf_similarities(names, f, x, t, steps, kf)
+
+def compute_object_color_step_kf_similarities(names, obj, x, t, steps, kf):
+    def f(name):
+        return is_object_color_feature(name, obj)
+
+    return compute_feature_step_kf_similarities(names, f, x, t, steps, kf)
+
+def compute_object_volume_step_kf_similarities(names, obj, x, t, steps, kf):
+    def f(name):
+        return is_object_volume_feature(name, obj)
+
+    return compute_feature_step_kf_similarities(names, f, x, t, steps, kf)
+
+def count_demos(demos):
+    n = 0
+
+    for pid in demos:
+        for task in demos[pid]:
+            for demo_id in demos[pid][task]:
+                n += 1
+
+    return n
 
 def print_results(f_dists, sims):
     for task in sims:
@@ -102,8 +153,12 @@ def print_results(f_dists, sims):
         print task
         print '--------------------'
         for f_name in f_dists[task]:
-            print f_name + ': ' + '{0:.2f}'.format(np.mean(f_dists[task][f_name]))
-        print 'Percent Change:', '{0:.2f}'.format(100*np.mean(sims[task])) + '%'
+            print f_name + ' mean distance: ' + '{0:.4f}'.format(np.mean(f_dists[task][f_name]))
+            print f_name + ' mean percent change: ' + '{0:.4f}'.format(100*np.mean(sims[task][f_name])) + '%'
+            print f_name + ' median distance: ' + '{0:.4f}'.format(np.median(f_dists[task][f_name]))
+            print f_name + ' median percent change: ' + '{0:.4f}'.format(100*np.median(sims[task][f_name])) + '%'
+            print f_name + ' 10% trimmed mean percent change: ' + '{0:.4f}'.format(100*trim_mean(sims[task][f_name],0.1)) + '%'
+            print
 
 def main():
     parser = argparse.ArgumentParser(description='Compare step and nearest keyframe feature vectors')
@@ -114,15 +169,21 @@ def main():
     demos = pickle.load(open(args.demos))
     tasks = args.task
 
+    curr_demo = 0
+    num_demos = count_demos(demos)
+
     f_dists = {}
     sims = {}
+
     for task in tasks:
         f_dists[task] = {}
-        sims[task] = []
+        sims[task] = {}
 
         for pid in demos:
             if task in demos[pid]:
                 for demo in demos[pid][task].values():
+                    print 'Processing demo (' + str(curr_demo+1) + '/' + str(num_demos) + ')...'
+
                     names = demo['state_names']
                     x = demo['state']
                     t = demo['t']
@@ -132,16 +193,24 @@ def main():
                     # add gripper position distances
                     if not 'gripper_position' in f_dists[task]:
                         f_dists[task]['gripper_position'] = []
+                        sims[task]['gripper_position'] = []
 
                     dists = compute_gripper_position_step_kf_distance(names, x, t, steps, kf)
                     f_dists[task]['gripper_position'].extend(dists)
 
+                    s = compute_gripper_position_step_kf_similarities(names, x, t, steps, kf) 
+                    sims[task]['gripper_position'].extend(s)
+
                     # add gripper state distances
                     if not 'gripper_state' in f_dists[task]:
                         f_dists[task]['gripper_state'] = []
+                        sims[task]['gripper_state'] = []
 
                     dists = compute_gripper_state_step_kf_distance(names, x, t, steps, kf)
                     f_dists[task]['gripper_state'].extend(dists)
+                    
+                    s = compute_gripper_state_step_kf_similarities(names, x, t, steps, kf) 
+                    sims[task]['gripper_state'].extend(s)
 
                     # add object feature distances
                     objs = get_object_names(names)
@@ -149,29 +218,39 @@ def main():
                         # add object position distances
                         if not obj+'_position' in f_dists[task]:
                             f_dists[task][obj+'_position'] = []
+                            sims[task][obj+'_position'] = []
 
                         dists = compute_object_position_step_kf_distance(names, obj, x, t, steps, kf)
                         f_dists[task][obj+'_position'].extend(dists)
+
+                        s = compute_object_position_step_kf_similarities(names, obj, x, t, steps, kf) 
+                        sims[task][obj+'_position'].extend(s)
 
                         # add object color distances
                         if task == 'lamp':
                             if not obj+'_color' in f_dists[task]:
                                 f_dists[task][obj+'_color'] = []
+                                sims[task][obj+'_color'] = []
 
                             dists = compute_object_color_step_kf_distance(names, obj, x, t, steps, kf)
                             f_dists[task][obj+'_color'].extend(dists)
+
+                            s = compute_object_color_step_kf_similarities(names, obj, x, t, steps, kf) 
+                            sims[task][obj+'_color'].extend(s)
 
                         # add object volume distances
                         elif task == 'drawer':
                             if not obj+'_volume' in f_dists[task]:
                                 f_dists[task][obj+'_volume'] = []
+                                sims[task][obj+'_volume'] = []
 
                             dists = compute_object_volume_step_kf_distance(names, obj, x, t, steps, kf)
                             f_dists[task][obj+'_volume'].extend(dists)
 
-                    # add similarity scores
-                    s = compute_step_kf_similarities(x, t, steps, kf) 
-                    sims[task].extend(s)
+                            s = compute_object_volume_step_kf_similarities(names, obj, x, t, steps, kf) 
+                            sims[task][obj+'_volume'].extend(s)
+
+                    curr_demo += 1
 
     print_results(f_dists, sims)
  
